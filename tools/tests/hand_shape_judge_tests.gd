@@ -8,7 +8,7 @@ const _BENT := 1.0
 const _LINKAGE_PAIR_COUNT := 4
 
 var _config: HandConfig = load("res://data/hand_config.tres")
-var _names: FoulNameTable = load("res://data/foul_name_table.tres")
+var _names: HandNameTable = load("res://data/hand_name_table.tres")
 var _judge := HandShapeJudge.new(_config, _names)
 
 
@@ -20,7 +20,7 @@ func run(assert_true: Callable) -> void:
 
 
 func _test_data(assert_true: Callable) -> void:
-	assert_true.call(_names.names.size() == _PATTERN_COUNT, "反則名の表は32通り")
+	assert_true.call(_names.names.size() == _PATTERN_COUNT, "名前の表は32通り")
 	assert_true.call(_config.linkage_strengths.size() == _LINKAGE_PAIR_COUNT, "連動の強さは隣接4組分")
 
 
@@ -34,16 +34,15 @@ func _test_all_crisp_patterns(assert_true: Callable) -> void:
 		var curls := PackedFloat64Array()
 		for finger in _FINGER_COUNT:
 			curls.append(_BENT if bits & (1 << finger) else _STRAIGHT)
-		var key := FoulNameTable.key_of(_judge.states_of(curls))
+		var key := HandNameTable.key_of(_judge.states_of(curls))
 		var shape := _judge.shape_of(curls)
-		var name := _judge.foul_name(curls)
-		if legal.has(key):
-			assert_true.call(shape == legal[key] and name == "", "合法な形: " + key)
-		else:
-			assert_true.call(
-				shape == HandTypes.Shape.FOUL and name == _names.names.get(key, "<none>"),
-				"反則の名前: %s → %s" % [key, name]
-			)
+		var name := _judge.hand_name(curls)
+		var expected_shape: HandTypes.Shape = legal.get(key, HandTypes.Shape.NAMED)
+		assert_true.call(
+			shape == expected_shape and name == _names.names.get(key, "<none>"),
+			"中途半端な指が無い形: %s → %s" % [key, name]
+		)
+		assert_true.call(_judge.foul_name(curls) == "", "中途半端な指が無ければ反則ではない: " + key)
 
 
 func _test_thresholds(assert_true: Callable) -> void:

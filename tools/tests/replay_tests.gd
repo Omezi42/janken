@@ -6,7 +6,8 @@ const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
 
 var _hand_config: HandConfig = load("res://data/hand_config.tres")
 var _match_config: MatchConfig = load("res://data/match_config.tres")
-var _names: FoulNameTable = load("res://data/foul_name_table.tres")
+var _names: HandNameTable = load("res://data/hand_name_table.tres")
+var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
 
 
 func run(assert_true: Callable) -> void:
@@ -35,7 +36,7 @@ func run(assert_true: Callable) -> void:
 
 
 func _new_match(log: Dictionary) -> LocalMatch:
-	var game := LocalMatch.new(_hand_config, _match_config, _names)
+	var game := LocalMatch.new(_hand_config, _match_config, _names, _effects)
 	log["names"] = []
 	game.round_judged.connect(
 		func(result: LocalMatch.RoundResult) -> void:

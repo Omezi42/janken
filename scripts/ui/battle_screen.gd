@@ -6,7 +6,8 @@ extends Control
 
 const HAND_CONFIG: HandConfig = preload("res://data/hand_config.tres")
 const MATCH_CONFIG: MatchConfig = preload("res://data/match_config.tres")
-const FOUL_NAMES: FoulNameTable = preload("res://data/foul_name_table.tres")
+const HAND_NAMES: HandNameTable = preload("res://data/hand_name_table.tres")
+const HAND_EFFECTS: HandEffectTable = preload("res://data/hand_effect_table.tres")
 
 const OUTCOME_TEXTS := {
 	HandTypes.Outcome.WIN: "かち!",
@@ -18,14 +19,19 @@ const MATCH_LOST_TEXT := "あなたの負け…"
 const RETRY_TEXT := "もう一度"
 const MY_WINS_FORMAT := "あなた %d勝"
 const THEIR_WINS_FORMAT := "あいて %d勝"
+## 効果の文の {target} に入れる呼び名。
+const MY_CALL_NAME := "あなた"
+const THEIR_CALL_NAME := "あいて"
 
 const BACKGROUND_COLOR := Color("2b3a4a")
 const TEXT_COLOR := Color.WHITE
 const FOUL_COLOR := Color("ff6b5b")
+const NAMED_COLOR := Color("ffd84a")
 const OUTLINE_COLOR := Color("101820")
 const OUTLINE_SIZE := 12
 const CALL_FONT_SIZE := 96
 const NAME_FONT_SIZE := 56
+const EFFECT_FONT_SIZE := 30
 const WINS_FONT_SIZE := 36
 const RETRY_FONT_SIZE := 44
 ## 処理落ちしたとき1フレームで追いつく tick 数の上限(それ以上は遅れを捨てる)。
@@ -45,6 +51,9 @@ var _their_view: HandView
 var _call_label: Label
 var _my_name_label: Label
 var _their_name_label: Label
+var _my_effect_label: Label
+var _their_effect_label: Label
+var _their_tape: CensorTape
 var _my_wins_label: Label
 var _their_wins_label: Label
 var _retry_button: Button
@@ -52,7 +61,7 @@ var _retry_button: Button
 
 func _ready() -> void:
 	_seed_rng.randomize()
-	_match = LocalMatch.new(HAND_CONFIG, MATCH_CONFIG, FOUL_NAMES)
+	_match = LocalMatch.new(HAND_CONFIG, MATCH_CONFIG, HAND_NAMES, HAND_EFFECTS)
 	_build()
 	_setup_players(OS.get_cmdline_user_args())
 	_match.round_started.connect(_on_round_started)
@@ -108,14 +117,18 @@ func _build() -> void:
 	_my_view.finger_dragged.connect(_on_my_finger_dragged)
 	_their_wins_label = _add_label(Rect2(0.04, 0.01, 0.92, 0.04), WINS_FONT_SIZE)
 	_my_wins_label = _add_label(Rect2(0.04, 0.95, 0.92, 0.04), WINS_FONT_SIZE)
+	_their_effect_label = _add_label(Rect2(0.0, 0.36, 1.0, 0.04), EFFECT_FONT_SIZE)
 	_their_name_label = _add_label(Rect2(0.0, 0.4, 1.0, 0.06), NAME_FONT_SIZE)
+	_their_tape = CensorTape.new()
+	_place(_their_tape, Rect2(0.0, 0.4, 1.0, 0.06))
 	_call_label = _add_label(Rect2(0.0, 0.46, 1.0, 0.08), CALL_FONT_SIZE)
 	_my_name_label = _add_label(Rect2(0.0, 0.54, 1.0, 0.06), NAME_FONT_SIZE)
+	_my_effect_label = _add_label(Rect2(0.0, 0.6, 1.0, 0.04), EFFECT_FONT_SIZE)
 	_retry_button = Button.new()
 	_retry_button.text = RETRY_TEXT
 	_retry_button.add_theme_font_size_override("font_size", RETRY_FONT_SIZE)
 	_retry_button.pressed.connect(_start_match)
-	_place(_retry_button, Rect2(0.3, 0.62, 0.4, 0.07))
+	_place(_retry_button, Rect2(0.3, 0.66, 0.4, 0.07))
 
 
 func _add_hand_view(model: HandModel, rect: Rect2) -> HandView:
@@ -159,23 +172,33 @@ func _on_my_finger_dragged(finger: HandTypes.Finger, amount: float) -> void:
 
 func _on_round_started() -> void:
 	_update_wins()
+	_my_effect_label.text = ""
+	_their_effect_label.text = ""
+	_their_view.censored = _match.effects.is_censored(THEIR_PLAYER)
 
 
 func _on_call_segment_changed(index: int) -> void:
 	_call_label.text = MATCH_CONFIG.call_words[index]
 	_my_name_label.text = ""
 	_their_name_label.text = ""
+	_their_tape.visible = false
 
 
 func _on_hands_called(call: LocalMatch.RoundResult) -> void:
 	_show_name(_my_name_label, call.my_name, call.my_shape)
-	_show_name(_their_name_label, call.their_name, call.their_shape)
+	_their_tape.visible = _match.effects.is_censored(THEIR_PLAYER)
+	var their_name := "" if _their_tape.visible else call.their_name
+	_show_name(_their_name_label, their_name, call.their_shape)
 
 
 func _on_round_judged(result: LocalMatch.RoundResult) -> void:
 	_call_label.text = OUTCOME_TEXTS[result.outcome]
 	_show_name(_my_name_label, result.my_name, result.my_shape)
 	_show_name(_their_name_label, result.their_name, result.their_shape)
+	_their_tape.visible = false
+	_their_view.censored = false
+	_my_effect_label.text = _effect_text(result.my_effect, THEIR_CALL_NAME)
+	_their_effect_label.text = _effect_text(result.their_effect, MY_CALL_NAME)
 	_update_wins()
 
 
@@ -187,8 +210,18 @@ func _on_match_finished(winner: int) -> void:
 
 func _show_name(label: Label, hand_name: String, shape: HandTypes.Shape) -> void:
 	label.text = hand_name
-	var color := FOUL_COLOR if shape == HandTypes.Shape.FOUL else TEXT_COLOR
+	var color := TEXT_COLOR
+	if shape == HandTypes.Shape.FOUL:
+		color = FOUL_COLOR
+	elif shape == HandTypes.Shape.NAMED:
+		color = NAMED_COLOR
 	label.add_theme_color_override("font_color", color)
+
+
+func _effect_text(effect: HandEffect, target_name: String) -> String:
+	if effect == null:
+		return ""
+	return effect.text.format({"target": target_name})
 
 
 func _update_wins() -> void:

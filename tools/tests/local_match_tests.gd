@@ -8,7 +8,8 @@ const BOT_SETTLE_TICKS := LocalMatch.TICKS_PER_SECOND * 3
 
 var _hand_config: HandConfig = load("res://data/hand_config.tres")
 var _match_config: MatchConfig = load("res://data/match_config.tres")
-var _names: FoulNameTable = load("res://data/foul_name_table.tres")
+var _names: HandNameTable = load("res://data/hand_name_table.tres")
+var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
 
 
 func run(assert_true: Callable) -> void:
@@ -34,7 +35,7 @@ func _test_call_segments(assert_true: Callable) -> void:
 
 
 func _new_match() -> LocalMatch:
-	return LocalMatch.new(_hand_config, _match_config, _names)
+	return LocalMatch.new(_hand_config, _match_config, _names, _effects)
 
 
 func _test_bot_makes_shape(assert_true: Callable) -> void:

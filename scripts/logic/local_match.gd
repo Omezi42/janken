@@ -24,16 +24,21 @@ class RoundResult:
 	var their_shape: HandTypes.Shape
 	var my_name: String
 	var their_name: String
+	## 発動した効果。無ければ null。判定のときだけ入る。
+	var my_effect: HandEffect
+	var their_effect: HandEffect
 
 
 var hands: Array[HandModel] = []
 var state: MatchState
 var phase := Phase.OVER
 var record := MatchRecord.new()
+var effects := ActiveEffects.new()
 ## start() からの tick 数。記録の時刻に使う。
 var tick_count := 0
 var _match_config: MatchConfig
 var _judge: HandShapeJudge
+var _effect_table: HandEffectTable
 var _rng := RandomNumberGenerator.new()
 var _phase_ticks := 0
 var _segment := 0
@@ -41,8 +46,14 @@ var _segment := 0
 var _pending_steps := PackedFloat64Array()
 
 
-func _init(hand_config: HandConfig, match_config: MatchConfig, names: FoulNameTable) -> void:
+func _init(
+	hand_config: HandConfig,
+	match_config: MatchConfig,
+	names: HandNameTable,
+	effect_table: HandEffectTable
+) -> void:
 	_match_config = match_config
+	_effect_table = effect_table
 	_judge = HandShapeJudge.new(hand_config, names)
 	for player in PLAYER_COUNT:
 		hands.append(HandModel.new(hand_config))
@@ -60,6 +71,7 @@ func start(match_seed: int) -> void:
 	record.seed = match_seed
 	tick_count = 0
 	state = MatchState.new(_match_config)
+	effects.reset()
 	_start_round()
 
 
@@ -102,11 +114,23 @@ func _end_result() -> void:
 func _start_round() -> void:
 	for hand in hands:
 		hand.randomize_pose(_rng)
+	_apply_effects()
 	_pending_steps.fill(0.0)
 	phase = Phase.CALLING
 	_phase_ticks = 0
 	round_started.emit()
 	_enter_segment(0)
+
+
+func _apply_effects() -> void:
+	for player in PLAYER_COUNT:
+		var hand := hands[player]
+		for finger in HandTypes.Finger.size():
+			var sleepy := effects.is_oversleeping(player, finger)
+			hand.drag_scales[finger] = _effect_table.oversleep_drag_scale if sleepy else 1.0
+		if effects.is_shot(player):
+			var shot := _rng.randi_range(0, HandTypes.Finger.size() - 1)
+			hand.set_curl(shot as HandTypes.Finger, HandModel.MAX_CURL)
 
 
 func _apply_pending() -> void:
@@ -161,6 +185,19 @@ func _finish_round() -> void:
 	var result := _name_hands()
 	result.outcome = RoundRules.outcome(result.my_shape, result.their_shape)
 	state.record(result.outcome)
+	effects.end_round()
+	result.my_effect = _trigger_effect(0)
+	result.their_effect = _trigger_effect(1)
 	phase = Phase.RESULT
 	_phase_ticks = 0
 	round_judged.emit(result)
+
+
+func _trigger_effect(player: int) -> HandEffect:
+	var states := _judge.states_of(hands[player].curls)
+	if _judge.shape_of(hands[player].curls) != HandTypes.Shape.NAMED:
+		return null
+	var effect := _effect_table.effect_of(states)
+	if effect != null:
+		effects.trigger(player, effect, states)
+	return effect

@@ -1,6 +1,6 @@
-class_name FoulNameTable
+class_name HandNameTable
 extends Resource
-## 反則した手の名前(GameDesign 2.4節)。
+## 名前付きの手と反則した手の名前(GameDesign 2.4節)。
 ## キーは親・人・中・薬・小の順に、伸び=EXTENDED_MARK / 曲がり=CURLED_MARK を並べた文字列。
 
 const EXTENDED_MARK := "○"

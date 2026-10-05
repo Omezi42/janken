@@ -1,9 +1,9 @@
-[gd_resource type="Resource" script_class="FoulNameTable" format=3]
+[gd_resource type="Resource" script_class="HandNameTable" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/foul_name_table.gd" id="1_foul"]
+[ext_resource type="Script" path="res://scripts/data/hand_name_table.gd" id="1_names"]
 
 [resource]
-script = ExtResource("1_foul")
+script = ExtResource("1_names")
 names = Dictionary[String, String]({
 "●●●●●": "グー",
 "●○○●●": "チョキ",

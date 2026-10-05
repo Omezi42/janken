@@ -12,7 +12,7 @@
 
 ### ロジック(オフライン)
 - [x] 縦長のプロジェクト設定(Architecture 2章)
-- [x] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`
+- [x] `HandConfig` / `MatchConfig` / `HandNameTable` と初期値の `.tres`
 - [x] `HandModel`(連動・慣性・初期配置)+ テスト
 - [x] `HandShapeJudge` + テスト(32パターン、ほぼ/ゆるい/グニャグニャ)
 - [x] `RoundRules` / `MatchState` + テスト
@@ -25,9 +25,9 @@
 - [x] 掛け声「さいしょは・(双方の手の名前)・じゃん・けん・ぽん」
 
 ### 名前付きの手と効果
-- [ ] 名前付きの手を反則と分け、強さを グーチョキパー > 名前付き > 反則 にする(`FoulNameTable` → `HandNameTable`)
-- [ ] `HandEffectTable` と `ActiveEffects`、`LocalMatch` での発動と反映(自主規制・寝坊・ピストル)+ テスト
-- [ ] 画面: モザイク・規制テープ・効果の文
+- [x] 名前付きの手を反則と分け、強さを グーチョキパー > 名前付き > 反則 にする(`HandNameTable`)
+- [x] `HandEffectTable` と `ActiveEffects`、`LocalMatch` での発動と反映(自主規制・寝坊・ピストル)+ テスト
+- [x] 画面: モザイク・規制テープ・効果の文
 
 ### オンライン
 - [ ] `server/` の雛形(Workers + Durable Objects、wrangler でローカル起動)

@@ -25,10 +25,18 @@ const SKIN_COLOR := Color("f2c9a0")
 const CURLED_SKIN_COLOR := Color("b9845a")
 const PALM_COLOR := Color("e8b98c")
 const NAIL_COLOR := Color("fbe8dc")
+## モザイクの1マスの大きさと、覆う範囲(手のひらの中心からの距離)。
+const MOSAIC_CELL_RATIO := 0.4
+const MOSAIC_REACH_RATIO := 2.4
+const MOSAIC_COLORS := [SKIN_COLOR, PALM_COLOR, CURLED_SKIN_COLOR]
+## マスの色を散らすための係数(互いに素な数ならよい)。
+const MOSAIC_HASH := Vector2i(7, 13)
 
 const NO_FINGER := -1
 
 var interactive := false
+## 自主規制(GameDesign 2.5節)で手をモザイクで覆う。
+var censored := false
 var _model: HandModel
 var _dragging := NO_FINGER
 
@@ -59,6 +67,22 @@ func _draw() -> void:
 		draw_circle(tip, width / 2.0, color)
 		draw_circle(tip, width / 2.0 * (1.0 - curl), NAIL_COLOR)
 	draw_circle(Vector2.ZERO, radius, PALM_COLOR)
+	if censored:
+		_draw_mosaic(radius)
+
+
+func _draw_mosaic(radius: float) -> void:
+	draw_set_transform(size / 2.0)
+	var cell := radius * MOSAIC_CELL_RATIO
+	var reach := radius * MOSAIC_REACH_RATIO
+	var cells := ceili(reach / cell)
+	for x in range(-cells, cells):
+		for y in range(-cells, cells):
+			var corner := Vector2(x, y) * cell
+			if (corner + Vector2.ONE * cell / 2.0).length() > reach:
+				continue
+			var color_index := posmod(x * MOSAIC_HASH.x + y * MOSAIC_HASH.y, MOSAIC_COLORS.size())
+			draw_rect(Rect2(corner, Vector2.ONE * cell), MOSAIC_COLORS[color_index])
 
 
 func _gui_input(event: InputEvent) -> void:

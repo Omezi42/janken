@@ -10,6 +10,8 @@ const FULL_TURN_DEGREES := 360.0
 var curls := PackedFloat64Array()
 var targets := PackedFloat64Array()
 var wrist_rotation_degrees := 0.0
+## 指ごとに目標の変化量へ掛ける倍率(寝坊。GameDesign 2.5節)。
+var drag_scales := PackedFloat64Array()
 var _velocities := PackedFloat64Array()
 var _config: HandConfig
 
@@ -20,6 +22,8 @@ func _init(config: HandConfig) -> void:
 	curls.resize(finger_count)
 	targets.resize(finger_count)
 	_velocities.resize(finger_count)
+	drag_scales.resize(finger_count)
+	drag_scales.fill(1.0)
 
 
 ## ラウンド開始時の初期配置(GameDesign 6.3節)。
@@ -35,6 +39,13 @@ func set_pose(pose: PackedFloat64Array, rotation_degrees: float) -> void:
 	targets = pose.duplicate()
 	_velocities.fill(0.0)
 	wrist_rotation_degrees = rotation_degrees
+
+
+## 1本だけ曲がり具合を置き換える(ピストル。GameDesign 2.5節)。
+func set_curl(finger: HandTypes.Finger, curl: float) -> void:
+	curls[finger] = curl
+	targets[finger] = curl
+	_velocities[finger] = 0.0
 
 
 ## amount は曲がり具合の変化量(正で曲がる)。隣の指へ連動の強さを掛けながら伝える。
@@ -63,5 +74,5 @@ func step(delta: float) -> void:
 ## 実際に動いた量を返す(端で止まった分は含まない)。
 func _move_target(finger: int, amount: float) -> float:
 	var before := targets[finger]
-	targets[finger] = clampf(before + amount, MIN_CURL, MAX_CURL)
+	targets[finger] = clampf(before + amount * drag_scales[finger], MIN_CURL, MAX_CURL)
 	return targets[finger] - before
