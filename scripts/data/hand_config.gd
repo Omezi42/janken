@@ -8,7 +8,7 @@ extends Resource
 @export_range(0.0, 1.0) var curled_above: float
 ## 反則の名前を引くとき、中途半端な指をこれ以上なら曲がり・未満なら伸びへ寄せる。
 @export_range(0.0, 1.0) var name_snap_border: float
-## 隣接する指の連動の強さ。[親−人, 人−中, 中−薬, 薬−小] の順。
+## 隣接する指の連動の強さ。[親−人, 人−中, 中−薬, 薬−小] の順。負なら逆向きに動く。
 @export var linkage_strengths: Array[float] = []
 ## 指が目標の曲がり具合へ戻るばねの強さ。
 @export var spring_stiffness: float

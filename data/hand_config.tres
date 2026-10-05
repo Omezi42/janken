@@ -7,6 +7,6 @@ script = ExtResource("1_hand")
 extended_below = 0.3
 curled_above = 0.7
 name_snap_border = 0.5
-linkage_strengths = Array[float]([0.2, 0.4, 0.6, 0.5])
+linkage_strengths = Array[float]([-0.4, 0.4, 0.4, 0.5])
 spring_stiffness = 120.0
 spring_damping = 12.0

@@ -18,17 +18,17 @@ func run(assert_true: Callable) -> void:
 
 
 func _test_linkage(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.0, 0.0, 0.0, 0.0, 0.0]))
-	hand.drag(HandTypes.Finger.MIDDLE, 0.5)
-	var expected := [0.04, 0.2, 0.5, 0.3, 0.15]
-	assert_true.call(_close(hand.targets, expected), "連動は隣へ掛け算で伝わる %s" % [hand.targets])
-	assert_true.call(_close(hand.curls, [0.0, 0.0, 0.0, 0.0, 0.0]), "ドラッグで動くのは目標だけ")
+	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.5]))
+	hand.drag(HandTypes.Finger.MIDDLE, 0.4)
+	var expected := [0.436, 0.66, 0.9, 0.66, 0.58]
+	assert_true.call(_close(hand.targets, expected), "連動は隣へ掛け算で伝わり、負なら逆向き %s" % [hand.targets])
+	assert_true.call(_close(hand.curls, [0.5, 0.5, 0.5, 0.5, 0.5]), "ドラッグで動くのは目標だけ")
 
 
 func _test_linkage_at_edge(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.0, 0.0, 0.0, 0.0, 0.8]))
+	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.8]))
 	hand.drag(HandTypes.Finger.PINKY, 0.5)
-	assert_true.call(_close(hand.targets, [0.0048, 0.024, 0.06, 0.1, 1.0]), "端で止まった分は連動しない")
+	assert_true.call(_close(hand.targets, [0.4936, 0.516, 0.54, 0.6, 1.0]), "端で止まった分は連動しない")
 
 
 func _test_inertia(assert_true: Callable) -> void:
