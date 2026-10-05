@@ -15,7 +15,7 @@ var _match_config: MatchConfig = load("res://data/match_config.tres")
 func run(assert_true: Callable) -> void:
 	_test_round_rules(assert_true)
 	_test_match_state(assert_true)
-	assert_true.call(is_equal_approx(_match_config.call_total_seconds(), 3.0), "掛け声は合計3秒")
+	assert_true.call(is_equal_approx(_match_config.call_total_seconds(), 5.0), "掛け声は合計5秒")
 
 
 func _test_round_rules(assert_true: Callable) -> void:

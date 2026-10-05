@@ -3,7 +3,7 @@ extends Resource
 ## 試合の数値(GameDesign 5章)。
 
 @export var wins_to_finish: int
-## 掛け声の各区間(じゃん・けん・ぽん)の秒数。
+## 掛け声の各区間(さいしょは・グー・じゃん・けん・ぽん)の秒数。
 @export var call_segment_seconds: Array[float] = []
 ## 掛け声の各区間に表示する文字。call_segment_seconds と同じ並び。
 @export var call_words: Array[String] = []

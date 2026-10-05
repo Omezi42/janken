@@ -19,8 +19,8 @@ func run(assert_true: Callable) -> void:
 
 
 func _test_call_segments(assert_true: Callable) -> void:
-	var segments := [0.0, 0.99, 1.0, 2.5, 3.0]
-	var expected := [0, 0, 1, 2, 3]
+	var segments := [0.0, 0.99, 1.0, 4.5, 5.0]
+	var expected := [0, 0, 1, 4, 5]
 	for i in segments.size():
 		var actual := _match_config.call_segment_at(segments[i])
 		assert_true.call(
@@ -77,7 +77,7 @@ func _test_full_match(assert_true: Callable) -> void:
 	assert_true.call(log["winner"] == game.state.winner(), "勝者が通知される")
 	assert_true.call(game.state.wins.max() == _match_config.wins_to_finish, "3勝で終わる")
 	assert_true.call(not game.can_operate(), "試合終了後は操作できない")
-	assert_true.call(log["segments"].slice(0, 3) == [0, 1, 2], "じゃん・けん・ぽんの順に進む")
+	assert_true.call(log["segments"].slice(0, 5) == [0, 1, 2, 3, 4], "さいしょは〜ぽんの順に進む")
 	var rounds_played: int = log["rounds"]
 	game.start(SEED)
 	assert_true.call(
