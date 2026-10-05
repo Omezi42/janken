@@ -16,6 +16,7 @@ func run(assert_true: Callable) -> void:
 	_test_bot_makes_shape(assert_true)
 	_test_full_match(assert_true)
 	_test_drag_is_applied_on_tick(assert_true)
+	_test_hands_called(assert_true)
 
 
 func _test_call_segments(assert_true: Callable) -> void:
@@ -107,3 +108,28 @@ func _test_drag_is_applied_on_tick(assert_true: Callable) -> void:
 	game.drag(0, HandTypes.Finger.RING, tiny)
 	game.tick()
 	assert_true.call(game.record.size() == recorded + 1, "1ステップ未満の端数は次の tick へ持ち越す")
+
+
+func _test_hands_called(assert_true: Callable) -> void:
+	var judge := HandShapeJudge.new(_hand_config, _names)
+	var game := _new_match()
+	var calls := []
+	var called_names := []
+	game.hands_called.connect(
+		func(call: LocalMatch.RoundResult) -> void:
+			calls.append(call)
+			called_names.append(judge.hand_name(game.hands[1].curls))
+			assert_true.call(
+				game.phase == LocalMatch.Phase.CALLING and game.state.wins == [0, 0], "呼ぶだけで判定しない"
+			)
+	)
+	game.start(SEED)
+	var call_ticks := roundi(_match_config.call_total_seconds() * LocalMatch.TICKS_PER_SECOND)
+	for i in call_ticks:
+		game.drag(1, HandTypes.Finger.INDEX, LocalMatch.TICK_SECONDS)
+		game.tick()
+	assert_true.call(calls.size() == 1, "手の名前は1ラウンドに1回だけ呼ぶ (%d)" % calls.size())
+	if calls.is_empty():
+		return
+	var call: LocalMatch.RoundResult = calls[0]
+	assert_true.call(call.their_name == called_names[0], "呼んだ瞬間の手の名前を出す")

@@ -57,6 +57,7 @@ func _ready() -> void:
 	_setup_players(OS.get_cmdline_user_args())
 	_match.round_started.connect(_on_round_started)
 	_match.call_segment_changed.connect(_on_call_segment_changed)
+	_match.hands_called.connect(_on_hands_called)
 	_match.round_judged.connect(_on_round_judged)
 	_match.match_finished.connect(_on_match_finished)
 	_start_match()
@@ -157,13 +158,18 @@ func _on_my_finger_dragged(finger: HandTypes.Finger, amount: float) -> void:
 
 
 func _on_round_started() -> void:
-	_my_name_label.text = ""
-	_their_name_label.text = ""
 	_update_wins()
 
 
 func _on_call_segment_changed(index: int) -> void:
 	_call_label.text = MATCH_CONFIG.call_words[index]
+	_my_name_label.text = ""
+	_their_name_label.text = ""
+
+
+func _on_hands_called(call: LocalMatch.RoundResult) -> void:
+	_show_name(_my_name_label, call.my_name, call.my_shape)
+	_show_name(_their_name_label, call.their_name, call.their_shape)
 
 
 func _on_round_judged(result: LocalMatch.RoundResult) -> void:

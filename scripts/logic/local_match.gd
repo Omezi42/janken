@@ -6,6 +6,8 @@ extends RefCounted
 
 signal round_started
 signal call_segment_changed(index: int)
+## 手の名前を呼ぶ区間の始まり。call.outcome は使わない。
+signal hands_called(call: RoundResult)
 signal round_judged(result: RoundResult)
 signal match_finished(winner: int)
 
@@ -103,9 +105,8 @@ func _start_round() -> void:
 	_pending_steps.fill(0.0)
 	phase = Phase.CALLING
 	_phase_ticks = 0
-	_segment = 0
 	round_started.emit()
-	call_segment_changed.emit(_segment)
+	_enter_segment(0)
 
 
 func _apply_pending() -> void:
@@ -131,15 +132,21 @@ func _tick_call() -> void:
 	if segment >= _match_config.call_segment_seconds.size():
 		_finish_round()
 	elif segment != _segment:
-		_segment = segment
-		call_segment_changed.emit(_segment)
+		_enter_segment(segment)
+
+
+func _enter_segment(segment: int) -> void:
+	_segment = segment
+	call_segment_changed.emit(_segment)
+	if _segment == _match_config.hand_call_segment:
+		hands_called.emit(_name_hands())
 
 
 func _phase_seconds() -> float:
 	return float(_phase_ticks) / TICKS_PER_SECOND
 
 
-func _finish_round() -> void:
+func _name_hands() -> RoundResult:
 	var mine := hands[0].curls
 	var theirs := hands[1].curls
 	var result := RoundResult.new()
@@ -147,6 +154,11 @@ func _finish_round() -> void:
 	result.their_shape = _judge.shape_of(theirs)
 	result.my_name = _judge.hand_name(mine)
 	result.their_name = _judge.hand_name(theirs)
+	return result
+
+
+func _finish_round() -> void:
+	var result := _name_hands()
 	result.outcome = RoundRules.outcome(result.my_shape, result.their_shape)
 	state.record(result.outcome)
 	phase = Phase.RESULT
