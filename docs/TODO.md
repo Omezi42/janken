@@ -13,7 +13,7 @@
 - [ ] 縦長のプロジェクト設定(Architecture 2章)
 - [ ] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`
 - [ ] `HandModel`(連動・慣性・初期配置)+ テスト
-- [ ] `HandShapeJudge` + テスト(16パターン+中途半端)
+- [ ] `HandShapeJudge` + テスト(32パターン、ほぼ/ゆるい/グニャグニャ)
 - [ ] `RoundRules` / `MatchState` + テスト
 
 ### ローカルで遊べる1画面

@@ -42,7 +42,7 @@
 | クラス | 責務 |
 |---|---|
 | `HandModel` | 5本の曲がり具合と手首の回転を持つ。ドラッグ入力を受けて連動・慣性込みで `step(delta)` する |
-| `HandShapeJudge` | 曲がり具合 → グー/チョキ/パー/反則。反則なら `FoulNameTable` から名前を引く |
+| `HandShapeJudge` | 5本の曲がり具合 → グー/チョキ/パー/反則。反則なら中途半端な指を寄せて `FoulNameTable` から名前(ほぼ/ゆるい/グニャグニャ込み)を引く |
 | `RoundRules` | 2つの形から勝敗(勝ち/負け/あいこ)を返す |
 | `MatchState` | 勝利数と試合終了の判定 |
 
@@ -50,9 +50,9 @@
 
 | Resource | 中身 | 仕様 |
 |---|---|---|
-| `HandConfig` | 状態のしきい値、連動の強さ、慣性(ばね定数・減衰) | GameDesign 2.1節・6章 |
+| `HandConfig` | 状態のしきい値、名前用に寄せる境目、連動の強さ、慣性(ばね定数・減衰) | GameDesign 2.1節・6章 |
 | `MatchConfig` | 勝利に必要な勝ち数、掛け声の各区間の秒数 | GameDesign 5章 |
-| `FoulNameTable` | 4本の指の状態パターン → 名前、中途半端時の名前 | GameDesign 2.4節 |
+| `FoulNameTable` | 5本の指の状態パターン → 名前、「ほぼ」「ゆるい」の付け方、5本とも中途半端時の名前 | GameDesign 2.4節 |
 
 サーバー(TypeScript)は `.tres` を読めないため、しきい値・勝ち数・反則名は同じ値を `server/` 側にも持つ。不一致は4章のテストで検出する。
 
