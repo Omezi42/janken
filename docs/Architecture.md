@@ -6,7 +6,9 @@
 
 | パス | 中身 |
 |---|---|
-| `scripts/` | ゲームのスクリプト。ロジック(`scripts/logic/` 想定)とUIを分ける |
+| `scripts/logic/` | 通信にもUIにも依存しないゲームロジック(4章) |
+| `scripts/data/` | Resource の定義(5章) |
+| `data/` | Resource の初期値(`.tres`) |
 | `scenes/` | `.tscn`。直接編集せず `tools/godot_apply_patch.gd` 経由で更新する |
 | `assets/` | 手のイラスト・背景などの画像 |
 | `server/` | Cloudflare Workers + Durable Objects のサーバー(TypeScript) |
@@ -41,9 +43,12 @@
 
 | クラス | 責務 |
 |---|---|
+| `HandTypes` | 指・指の状態・手の形・勝敗の列挙 |
 | `HandModel` | 5本の曲がり具合と手首の回転を持つ。ドラッグ入力を受けて連動・慣性込みで `step(delta)` する |
 | `HandShapeJudge` | 5本の曲がり具合 → グー/チョキ/パー/反則。反則なら中途半端な指を寄せて `FoulNameTable` から名前(ほぼ/ゆるい/グニャグニャ込み)を引く |
 | `RoundRules` | 2つの形から勝敗(勝ち/負け/あいこ)を返す |
+
+曲がり具合は親指から小指の順の `PackedFloat64Array` で渡す(型付き配列の落とし穴を避け、サーバーの倍精度と揃えるため)。
 | `MatchState` | 勝利数と試合終了の判定 |
 
 ## 5章 データ(Resource)

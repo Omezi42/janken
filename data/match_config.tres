@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="MatchConfig" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/match_config.gd" id="1_match"]
+
+[resource]
+script = ExtResource("1_match")
+wins_to_finish = 3
+call_segment_seconds = Array[float]([1.0, 1.0, 1.0])

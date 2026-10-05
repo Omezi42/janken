@@ -41,12 +41,17 @@ grep -qE "FAILED|SCRIPT ERROR|Parse Error" logs/check_tests.log && status=1
 grep -q "tests passed" logs/check_tests.log || status=1
 
 echo "== startup smoke"
-timeout "$GODOT_TIMEOUT" "$GODOT" --headless --path . --quit-after 60 > logs/check_smoke.log 2>&1
-if grep -E "SCRIPT ERROR|Parse Error|Failed to load" logs/check_smoke.log | head -10 | grep -q .; then
-  grep -E "SCRIPT ERROR|Parse Error|Failed to load" logs/check_smoke.log | head -10
-  status=1
+# メインシーンが無いと Godot はエラーのあと終了しないため、未設定の間は飛ばす。
+if ! grep -q '^run/main_scene=' project.godot; then
+  echo "skip(run/main_scene 未設定)"
 else
-  echo "ok"
+  timeout "$GODOT_TIMEOUT" "$GODOT" --headless --path . --quit-after 60 > logs/check_smoke.log 2>&1
+  if grep -E "SCRIPT ERROR|Parse Error|Failed to load" logs/check_smoke.log | head -10 | grep -q .; then
+    grep -E "SCRIPT ERROR|Parse Error|Failed to load" logs/check_smoke.log | head -10
+    status=1
+  else
+    echo "ok"
+  fi
 fi
 
 [ $status -eq 0 ] && echo "== ALL OK" || echo "== NG (logs/check_*.log)"

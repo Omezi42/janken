@@ -9,6 +9,7 @@
   `.godot/global_script_class_cache.cfg` へ登録されず、`--script` 起動が「Could not find type」で失敗する。
   `.godot/` はgit管理外のため、clone・pull直後も同じ。登録が古いとテストはコンパイルに失敗したまま**終了せずに固まる**。
   `check.sh` は足りない `class_name` を見つけると自動で `--import` する
+- **`run/main_scene` が未設定のまま起動すると、エラーを出したあと終了せずに固まる。**`check.sh` は未設定の間スモークを飛ばす
 - **`run_tests.gd` が読まないスクリプト(UIなど)のパースエラーは検出できない。**UIを触ったら起動スモークまで回す
 - **GUIのクリックはヘッドレスでは届かない**(`push_input` しても `gui_get_hovered_control()` は none のまま)。押下の確認は非ヘッドレスで行う
 - **`--headless` では実際のピクセルが得られない。**スクリーンショットは通常起動で撮る。

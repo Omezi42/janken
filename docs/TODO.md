@@ -10,11 +10,11 @@
 ## 実装
 
 ### ロジック(オフライン)
-- [ ] 縦長のプロジェクト設定(Architecture 2章)
-- [ ] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`
-- [ ] `HandModel`(連動・慣性・初期配置)+ テスト
-- [ ] `HandShapeJudge` + テスト(32パターン、ほぼ/ゆるい/グニャグニャ)
-- [ ] `RoundRules` / `MatchState` + テスト
+- [x] 縦長のプロジェクト設定(Architecture 2章)
+- [x] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`(`HandConfig` の慣性の数値は未定)
+- [ ] `HandModel`(連動・慣性・初期配置)+ テスト(GameDesign 6章の連動・慣性の決め方が未定)
+- [x] `HandShapeJudge` + テスト(32パターン、ほぼ/ゆるい/グニャグニャ)
+- [x] `RoundRules` / `MatchState` + テスト
 
 ### ローカルで遊べる1画面
 - [ ] `HandView`(仮の手の描画+指ドラッグ)
