@@ -10,3 +10,7 @@ extends Resource
 @export_range(0.0, 1.0) var name_snap_border: float
 ## 隣接する指の連動の強さ。[親−人, 人−中, 中−薬, 薬−小] の順。
 @export var linkage_strengths: Array[float] = []
+## 指が目標の曲がり具合へ戻るばねの強さ。
+@export var spring_stiffness: float
+## 指の速度を弱める強さ。
+@export var spring_damping: float

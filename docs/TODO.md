@@ -11,8 +11,8 @@
 
 ### ロジック(オフライン)
 - [x] 縦長のプロジェクト設定(Architecture 2章)
-- [x] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`(`HandConfig` の慣性の数値は未定)
-- [ ] `HandModel`(連動・慣性・初期配置)+ テスト(GameDesign 6章の連動・慣性の決め方が未定)
+- [x] `HandConfig` / `MatchConfig` / `FoulNameTable` と初期値の `.tres`
+- [x] `HandModel`(連動・慣性・初期配置)+ テスト
 - [x] `HandShapeJudge` + テスト(32パターン、ほぼ/ゆるい/グニャグニャ)
 - [x] `RoundRules` / `MatchState` + テスト
 

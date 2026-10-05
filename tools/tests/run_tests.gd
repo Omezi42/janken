@@ -5,6 +5,7 @@ extends SceneTree
 const SUITES := [
 	preload("res://tools/tests/hand_shape_judge_tests.gd"),
 	preload("res://tools/tests/match_tests.gd"),
+	preload("res://tools/tests/hand_model_tests.gd"),
 ]
 
 var _failures := 0
