@@ -1,7 +1,8 @@
 class_name BattleScreen
 extends Control
 ## ボット相手にローカルで遊ぶ対戦画面(GameDesign 3章・5章)。奥に相手、手前に自分の手。
-## 進行は LocalMatch が持ち、この画面はシグナルを受けて表示を変えるだけ。
+## 進行は LocalMatch が持ち、この画面は実時間を固定 tick へ刻んで回し、シグナルを受けて表示を変えるだけ。
+## 開発用の起動引数(`-- --replay=<記録の文字列>` / `-- --bot-vs-bot`)は Architecture 6章。
 
 const HAND_CONFIG: HandConfig = preload("res://data/hand_config.tres")
 const MATCH_CONFIG: MatchConfig = preload("res://data/match_config.tres")
@@ -27,8 +28,18 @@ const CALL_FONT_SIZE := 96
 const NAME_FONT_SIZE := 56
 const WINS_FONT_SIZE := 36
 const RETRY_FONT_SIZE := 44
+## 処理落ちしたとき1フレームで追いつく tick 数の上限(それ以上は遅れを捨てる)。
+const MAX_TICKS_PER_FRAME := 8
+const REPLAY_ARG := "--replay="
+const BOT_VS_BOT_ARG := "--bot-vs-bot"
+const MY_PLAYER := 0
+const THEIR_PLAYER := 1
 
 var _match: LocalMatch
+var _bots: Array[HandBot] = []
+var _replay: MatchReplay
+var _seed_rng := RandomNumberGenerator.new()
+var _unprocessed_seconds := 0.0
 var _my_view: HandView
 var _their_view: HandView
 var _call_label: Label
@@ -40,10 +51,10 @@ var _retry_button: Button
 
 
 func _ready() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	_match = LocalMatch.new(HAND_CONFIG, MATCH_CONFIG, FOUL_NAMES, rng)
+	_seed_rng.randomize()
+	_match = LocalMatch.new(HAND_CONFIG, MATCH_CONFIG, FOUL_NAMES)
 	_build()
+	_setup_players(OS.get_cmdline_user_args())
 	_match.round_started.connect(_on_round_started)
 	_match.call_segment_changed.connect(_on_call_segment_changed)
 	_match.round_judged.connect(_on_round_judged)
@@ -52,16 +63,48 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	_match.advance(delta)
-	_my_view.interactive = _match.can_operate()
+	var max_seconds := LocalMatch.TICK_SECONDS * MAX_TICKS_PER_FRAME
+	_unprocessed_seconds = minf(_unprocessed_seconds + delta, max_seconds)
+	while _unprocessed_seconds >= LocalMatch.TICK_SECONDS:
+		_unprocessed_seconds -= LocalMatch.TICK_SECONDS
+		_tick()
+	_my_view.interactive = _is_human_playing() and _match.can_operate()
+
+
+func _setup_players(args: PackedStringArray) -> void:
+	for arg in args:
+		if arg.begins_with(REPLAY_ARG):
+			var record := MatchRecord.from_text(arg.substr(REPLAY_ARG.length()))
+			if record == null:
+				push_error("リプレイの文字列を読めない")
+			else:
+				_replay = MatchReplay.new(_match, record)
+				return
+	if BOT_VS_BOT_ARG in args:
+		_bots.append(HandBot.new(_match, MY_PLAYER, _seed_rng.randi()))
+	_bots.append(HandBot.new(_match, THEIR_PLAYER, _seed_rng.randi()))
+
+
+func _is_human_playing() -> bool:
+	return _replay == null and _bots.size() < LocalMatch.PLAYER_COUNT
+
+
+func _tick() -> void:
+	if _replay != null:
+		_replay.tick()
+		return
+	for bot in _bots:
+		bot.think()
+	_match.tick()
 
 
 func _build() -> void:
 	var background := ColorRect.new()
 	background.color = BACKGROUND_COLOR
 	_place(background, Rect2(0.0, 0.0, 1.0, 1.0))
-	_their_view = _add_hand_view(_match.their_hand, Rect2(0.0, 0.05, 1.0, 0.4))
-	_my_view = _add_hand_view(_match.my_hand, Rect2(0.0, 0.55, 1.0, 0.4))
+	_their_view = _add_hand_view(_match.hands[THEIR_PLAYER], Rect2(0.0, 0.05, 1.0, 0.4))
+	_my_view = _add_hand_view(_match.hands[MY_PLAYER], Rect2(0.0, 0.55, 1.0, 0.4))
+	_my_view.finger_dragged.connect(_on_my_finger_dragged)
 	_their_wins_label = _add_label(Rect2(0.04, 0.01, 0.92, 0.04), WINS_FONT_SIZE)
 	_my_wins_label = _add_label(Rect2(0.04, 0.95, 0.92, 0.04), WINS_FONT_SIZE)
 	_their_name_label = _add_label(Rect2(0.0, 0.4, 1.0, 0.06), NAME_FONT_SIZE)
@@ -103,7 +146,14 @@ func _place(control: Control, rect: Rect2) -> void:
 
 func _start_match() -> void:
 	_retry_button.visible = false
-	_match.start()
+	if _replay != null:
+		_replay.start()
+	else:
+		_match.start(_seed_rng.randi())
+
+
+func _on_my_finger_dragged(finger: HandTypes.Finger, amount: float) -> void:
+	_match.drag(MY_PLAYER, finger, amount)
 
 
 func _on_round_started() -> void:
@@ -124,8 +174,9 @@ func _on_round_judged(result: LocalMatch.RoundResult) -> void:
 
 
 func _on_match_finished(winner: int) -> void:
-	_call_label.text = MATCH_WON_TEXT if winner == 0 else MATCH_LOST_TEXT
+	_call_label.text = MATCH_WON_TEXT if winner == MY_PLAYER else MATCH_LOST_TEXT
 	_retry_button.visible = true
+	print("replay: ", _match.record.to_text())
 
 
 func _show_name(label: Label, hand_name: String, shape: HandTypes.Shape) -> void:
@@ -135,5 +186,5 @@ func _show_name(label: Label, hand_name: String, shape: HandTypes.Shape) -> void
 
 
 func _update_wins() -> void:
-	_my_wins_label.text = MY_WINS_FORMAT % _match.state.wins[0]
-	_their_wins_label.text = THEIR_WINS_FORMAT % _match.state.wins[1]
+	_my_wins_label.text = MY_WINS_FORMAT % _match.state.wins[MY_PLAYER]
+	_their_wins_label.text = THEIR_WINS_FORMAT % _match.state.wins[THEIR_PLAYER]

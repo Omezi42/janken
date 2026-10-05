@@ -1,7 +1,11 @@
 class_name HandView
 extends Control
-## HandModel を仮の図形で描き、interactive なら指のドラッグを HandModel へ渡す(Architecture 6章)。
+## HandModel を仮の図形で描き、interactive なら指のドラッグを finger_dragged で知らせる(Architecture 6章)。
+## HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手首の回転 0° で指先が画面の上を向く。寸法はすべて手のひらの半径に対する比。
+
+## amount は曲がり具合の変化量(正で曲がる)。
+signal finger_dragged(finger: HandTypes.Finger, amount: float)
 
 ## 手のひらの半径(このノードの短辺に対する比)。
 const PALM_RADIUS_RATIO := 0.16
@@ -67,7 +71,7 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _dragging != NO_FINGER:
 		var local_motion: Vector2 = event.relative.rotated(-_wrist_radians())
 		var toward_tip := local_motion.dot(_finger_direction(_dragging))
-		_model.drag(_dragging as HandTypes.Finger, -toward_tip / _finger_length(_dragging))
+		finger_dragged.emit(_dragging as HandTypes.Finger, -toward_tip / _finger_length(_dragging))
 		accept_event()
 
 

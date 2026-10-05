@@ -7,6 +7,7 @@ const SUITES := [
 	preload("res://tools/tests/match_tests.gd"),
 	preload("res://tools/tests/hand_model_tests.gd"),
 	preload("res://tools/tests/local_match_tests.gd"),
+	preload("res://tools/tests/replay_tests.gd"),
 ]
 
 var _failures := 0

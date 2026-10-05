@@ -18,6 +18,13 @@
   (`godot --headless --main-pack build/web/index.pck --script res://tools/tests/run_tests.gd`)。
   `.tres` が `.tres.remap` になることによる差はこれでしか出ない
 
+### 決定論(リプレイが壊れる)
+
+- **ロジック層へ `_process` の delta を渡さない。グローバルの `randf()` / `randi()` を使わない。**時間は `LocalMatch.tick()` の回数、乱数は seed した専用の RNG だけ
+- **入力で `HandModel` を直接動かさない。**必ず `LocalMatch.drag()` を通す(記録に残らず、リプレイがずれる)
+- **ボットに試合の RNG を使わせない。**リプレイはボットを動かさないため、乱数列がずれて初期配置が変わる
+- **ロジックを変えたら古い記録の文字列は別の試合になる。**形式を変えたら `MatchRecord.FORMAT_VERSION` を上げる
+
 ### データとコードの境目
 
 - **`.tres` が保存する enum は整数。**途中へ値を挿入すると既存データが丸ごとずれる。新しい値は必ず末尾へ足す
