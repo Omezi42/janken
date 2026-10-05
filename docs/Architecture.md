@@ -1,32 +1,40 @@
-# Architecture(実装設計)
+# Architecture
 
-いまの構成だけを書く。大きくなったら節ごとに `docs/arch/NN_*.md` へ分け、このファイルは索引にする。
+## 1. 全体方針
 
-## 1章 ディレクトリ
+- Godot 4.6 / GDScript 2.0 / GL Compatibility(スマホとWebでも動かすため)
+- 縦長: 基準解像度 720×1280、stretch mode `canvas_items`、aspect `expand`
+- ゲームロジック(手のモデル・判定・試合進行)は Node に依存しない `RefCounted` で書き、ヘッドレスでテストする
+- 数値は `.tres` に置く(2節)
 
-| パス | 中身 |
+## 2. データ(Resource)
+
+| Resource | 中身 | 仕様 |
+|---|---|---|
+| `HandConfig` | 状態のしきい値、連動の強さ、慣性(ばね定数・減衰) | GameDesign 3章・4.1節 |
+| `MatchConfig` | 勝利に必要な勝ち数、掛け声の各区間の秒数 | GameDesign 5章 |
+| `FoulNameTable` | 4本の指の状態パターン → 名前、中途半端時の名前 | GameDesign 4.4節 |
+
+## 3. ロジック層(オフラインでテストする)
+
+| クラス | 責務 |
 |---|---|
-| `scripts/` | ゲームのスクリプト。ロジック(`scripts/logic/` 想定)とUIを分ける |
-| `scenes/` | `.tscn`。直接編集せず `tools/godot_apply_patch.gd` 経由で更新する |
-| `assets/` | 手のイラスト・背景などの画像 |
-| `server/` | Cloudflare Workers + Durable Objects のサーバー(TypeScript) |
-| `docs/` | 仕様・設計・落とし穴・TODO |
-| `tools/check.sh` | 検証の一括実行(gdformat → gdlint → ヘッドレステスト → 起動スモーク) |
-| `tools/tests/run_tests.gd` | ヘッドレステストの入口 |
-| `tools/godot_apply_patch.gd` | JSONのパッチで `.tscn` を編集する |
-| `.agents/skills/headless-godot/` | ヘッドレスGodot運用の手順集(CLI・シーン編集・テスト・書き出し) |
-| `gdlintrc` | gdlint の設定(既定値。`max-file-lines` 1000) |
+| `HandModel` | 5本の曲がり具合と手首の回転を持つ。ドラッグ入力を受けて連動・慣性込みで `step(delta)` する。初期配置のランダム化 |
+| `HandShapeJudge` | 曲がり具合 → グー/チョキ/パー/反則。反則なら `FoulNameTable` から名前を引く |
+| `RoundRules` | 2つの形から勝敗(勝ち/負け/あいこ)を返す |
+| `MatchState` | 勝利数と試合終了の判定 |
 
-## 2章 設計の方針
+## 4. 表示・入力層
 
-- じゃんけんの判定とラウンド進行は通信層に依存しないクラスに置き、ヘッドレステストで直接叩けるようにする(通信なしで仕様を検証できるため)。
-- 勝敗に関わる判定はクライアントだけで確定させず、サーバーが両者の手を受け取ってから判定する(相手の手を見てから出す不正を防ぐため)。
+- `HandView`: `HandModel` を描画し、指ごとのタッチ領域でドラッグを受けて `HandModel` へ渡す。ドラッグ量は手首の回転で指のローカル方向へ変換する
+- 手のイラストは指ごとに分けた画像を使う(ユーザーが用意する)。届くまではコードで描いた仮の手で進める
+- 相手の `HandView` は入力を受けず、受信した曲がり具合を表示するだけ
 
-## 3章 通信(Cloudflare)
+## 5. オンライン
 
-- サーバーは Cloudflare Workers + Durable Objects。クライアント(Godot の Web 書き出し)とは `WebSocketPeer` でつなぐ(ブラウザから使え、サーバーから相手の手や結果を即時に送れるため)。
-- **部屋 = Durable Object 1つ。**部屋が2人の接続・出した手・試合の進行を持ち、両者の手がそろってから判定して結果を2人へ送る。相手の手は結果と一緒に初めて送る。
-- **合言葉**: 合言葉から部屋を引く(`idFromName`)。同じ合言葉の2人が同じ部屋に入る。
-- **ランダムマッチ**: 待ち行列用の Durable Object 1つが待っている人を2人ずつ組み、新しい部屋のIDを両者へ返す。
-- サーバーのコードは `server/`(TypeScript)に置く。判定ルールはクライアントとサーバーの両方に要るため、テストで両者の結果が一致することを確かめる。
-- ゲーム本体(Web 書き出し)は Cloudflare Pages で配信する。
+- 専用サーバー方式: Godot をヘッドレスで動かすサーバーが試合進行と判定を持つ
+- 通信は `WebSocketMultiplayerPeer`(PC・スマホ・Webで共通に使えるため)
+- 自分の手はクライアント側でシミュレートする(操作の遅延を無くすため)。曲がり具合を約20Hzでサーバーへ送り、サーバーが相手へ中継する
+- サーバーは受信した曲がり具合の変化速度が上限を超えていないか確かめる(改造クライアントが一瞬で完璧な形を送る不正を防ぐ)
+- 掛け声はサーバーが「ぽん」の時刻を決めて通知する。クライアントは時計のずれを補正して掛け声を表示する
+- 「ぽん」の時刻にサーバーが持っている最新の曲がり具合で `HandShapeJudge` → `RoundRules` を実行し、結果を両者へ送る
