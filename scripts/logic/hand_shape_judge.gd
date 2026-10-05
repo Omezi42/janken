@@ -38,6 +38,14 @@ func foul_name(curls: PackedFloat64Array) -> String:
 	return _names.almost_prefix + base_name
 
 
+## 反則でない手は形の名前(グー・チョキ・パー)、反則なら反則の名前。
+func hand_name(curls: PackedFloat64Array) -> String:
+	var states := states_of(curls)
+	if _shape_of_states(states) == HandTypes.Shape.FOUL:
+		return foul_name(curls)
+	return _names.name_of(states)
+
+
 func states_of(curls: PackedFloat64Array) -> Array:
 	var states := []
 	for curl in curls:

@@ -5,6 +5,10 @@ extends Resource
 @export var wins_to_finish: int
 ## 掛け声の各区間(じゃん・けん・ぽん)の秒数。
 @export var call_segment_seconds: Array[float] = []
+## 掛け声の各区間に表示する文字。call_segment_seconds と同じ並び。
+@export var call_words: Array[String] = []
+## 判定のあと結果を表示しておく秒数。
+@export var result_display_seconds: float
 
 
 func call_total_seconds() -> float:
@@ -12,3 +16,13 @@ func call_total_seconds() -> float:
 	for seconds in call_segment_seconds:
 		total += seconds
 	return total
+
+
+## 掛け声の開始から seconds 秒の時点の区間。掛け声が終わっていれば区間の数を返す。
+func call_segment_at(seconds: float) -> int:
+	var end := 0.0
+	for i in call_segment_seconds.size():
+		end += call_segment_seconds[i]
+		if seconds < end:
+			return i
+	return call_segment_seconds.size()
