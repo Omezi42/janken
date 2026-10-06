@@ -4,7 +4,8 @@ extends RefCounted
 const SEED := 42
 ## 1試合の tick の上限(あいこが続いても終わることを確かめる)。
 const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
-const BOT_SETTLE_TICKS := LocalMatch.TICKS_PER_SECOND * 3
+## 相手を見て組み替える区間(ぽん)より前。
+const BOT_SETTLE_TICKS := roundi(LocalMatch.TICKS_PER_SECOND * 2.5)
 ## 名前を呼ぶ間も手を変え続ける間隔。
 const FLIP_INTERVAL_TICKS := 7
 
