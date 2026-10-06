@@ -16,7 +16,7 @@ func run(assert_true: Callable) -> void:
 	_test_call_segments(assert_true)
 	_test_bot_makes_shape(assert_true)
 	_test_full_match(assert_true)
-	_test_drag_is_applied_on_tick(assert_true)
+	_test_reach_is_applied_on_tick(assert_true)
 	_test_hands_called(assert_true)
 
 
@@ -88,33 +88,37 @@ func _test_full_match(assert_true: Callable) -> void:
 	assert_true.call(game.record.size() == 0, "もう一度で記録も新しくなる")
 
 
-func _test_drag_is_applied_on_tick(assert_true: Callable) -> void:
+func _test_reach_is_applied_on_tick(assert_true: Callable) -> void:
 	var game := _new_match()
 	game.start(SEED)
-	var before := game.hands[0].targets[HandTypes.Finger.INDEX]
-	var direction := 1.0 if before < 0.5 else -1.0
-	var amount := 0.25 * direction
-	game.drag(0, HandTypes.Finger.INDEX, amount)
-	assert_true.call(game.hands[0].targets[HandTypes.Finger.INDEX] == before, "drag は tick まで適用しない")
+	var hand := game.hands[0]
+	var before := hand.targets[HandTypes.Finger.INDEX]
+	var goal := 0.0 if before > 0.5 else 1.0
+	game.reach(0, HandTypes.Finger.INDEX, goal)
+	assert_true.call(hand.targets[HandTypes.Finger.INDEX] == before, "reach は tick まで適用しない")
 	game.tick()
-	var after := game.hands[0].targets[HandTypes.Finger.INDEX]
+	assert_true.call(hand.targets[HandTypes.Finger.INDEX] == goal, "tick の頭で目標を置く")
 	assert_true.call(
-		is_equal_approx(after - before, amount), "tick の頭で適用する (%f)" % [after - before]
+		(
+			game.record.size() == 1
+			and game.record.ticks[0] == 0
+			and game.record.steps[0] == roundi(goal * MatchRecord.STEPS_PER_CURL)
+		),
+		"適用した tick で目標を記録する"
 	)
-	assert_true.call(game.record.size() > 0 and game.record.ticks[0] == 0, "適用した tick で記録する")
-	var tiny := 0.4 / MatchRecord.STEPS_PER_CURL
-	game.drag(0, HandTypes.Finger.RING, tiny)
+	game.reach(0, HandTypes.Finger.RING, 0.2)
+	game.reach(0, HandTypes.Finger.RING, 0.3)
 	game.tick()
-	var recorded := game.record.size()
-	game.drag(0, HandTypes.Finger.RING, tiny)
+	assert_true.call(game.record.size() == 2, "同じ指が続いたら最後の値だけ記録する")
+	assert_true.call(is_equal_approx(hand.targets[HandTypes.Finger.RING], 0.3), "最後の値を目標にする")
+	game.reach(0, HandTypes.Finger.RING, 0.0)
+	game.reach(0, HandTypes.Finger.MIDDLE, 1.0)
+	game.reach(0, HandTypes.Finger.RING, 1.0)
 	game.tick()
-	assert_true.call(game.record.size() == recorded + 1, "1ステップ未満の端数は次の tick へ持ち越す")
-	var swing_before := game.hands[0].swings[HandTypes.Finger.MIDDLE]
-	var degrees := 5.0 if swing_before < 0.0 else -5.0
-	game.swing(0, HandTypes.Finger.MIDDLE, degrees)
-	game.tick()
-	var swung := game.hands[0].swings[HandTypes.Finger.MIDDLE] - swing_before
-	assert_true.call(is_equal_approx(swung, degrees), "向きも tick の頭で適用する (%f)" % swung)
+	assert_true.call(game.record.size() == 5, "間に別の指を挟んだら届いた順にすべて記録する")
+	assert_true.call(
+		hand.targets[HandTypes.Finger.RING] == HandModel.MAX_CURL, "届いた順に適用する(最後に触った指が目標どおり)"
+	)
 
 
 func _test_hands_called(assert_true: Callable) -> void:
@@ -133,7 +137,7 @@ func _test_hands_called(assert_true: Callable) -> void:
 	game.start(SEED)
 	var call_ticks := roundi(_match_config.call_total_seconds() * LocalMatch.TICKS_PER_SECOND)
 	for i in call_ticks:
-		game.drag(1, HandTypes.Finger.INDEX, LocalMatch.TICK_SECONDS)
+		game.reach(1, HandTypes.Finger.INDEX, float(i) / call_ticks)
 		game.tick()
 	assert_true.call(calls.size() == 1, "手の名前は1ラウンドに1回だけ呼ぶ (%d)" % calls.size())
 	if calls.is_empty():

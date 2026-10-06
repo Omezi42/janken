@@ -17,6 +17,8 @@
 - **動きの確認は録画する。**`godot --path . --resolution 720x1280 --write-movie <出力>.avi --fixed-fps 60 --script <撮影用スクリプト>` で
   基準解像度のまま全フレームを書き出し、ffmpeg で mp4 にする(ウィンドウは画面に収まるよう縮むが録画は縮まない)。
   操作は撮影用スクリプトから `root.push_input(イベント, true)` で真似られる(座標は基準解像度)
+- **入力を流す撮影用スクリプトは、録画しない確認でも `--fixed-fps 60` を付ける。**付けないと描画が遅いぶん
+  1フレームで複数 tick 進み、フレーム数で決めた入力のタイミングが試合の時間とずれる
 - **エクスポート済みpckに対してもテストを回す**
   (`godot --headless --main-pack build/web/index.pck --script res://tools/tests/run_tests.gd`)。
   `.tres` が `.tres.remap` になることによる差はこれでしか出ない

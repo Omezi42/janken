@@ -2,7 +2,7 @@ class_name LocalMatch
 extends RefCounted
 ## オフラインの1試合(GameDesign 5章)。プレイヤーは 0(手前)と 1(奥)。
 ## 固定間隔の tick() だけで進む決定論的なシミュレーション。同じ seed と同じ入力からは必ず同じ試合になる。
-## 入力は drag() / swing() で溜め、次の tick() の頭でステップ数へ丸めて適用し record へ残す(Architecture 4.1節)。
+## 入力は reach() で溜め、次の tick() の頭で目標をステップ数へ丸めて順に適用し record へ残す(Architecture 4.1節)。
 
 signal round_started
 signal call_segment_changed(index: int)
@@ -16,7 +16,6 @@ enum Phase { CALLING, RESULT, OVER }
 const TICKS_PER_SECOND := 60
 const TICK_SECONDS := 1.0 / TICKS_PER_SECOND
 const PLAYER_COUNT := 2
-const AXIS_COUNT := 2
 
 
 class RoundResult:
@@ -43,8 +42,9 @@ var _effect_table: HandEffectTable
 var _rng := RandomNumberGenerator.new()
 var _phase_ticks := 0
 var _segment := 0
-## まだ適用していない曲がり具合・向きの変化(ステップ単位)。並びは slot(プレイヤー × 量 × 指)。
-var _pending_steps := PackedFloat64Array()
+## まだ適用していない入力(届いた順)。slot はプレイヤー × 指、steps は目標の曲がり具合(ステップ単位)。
+var _pending_slots := PackedByteArray()
+var _pending_steps := PackedInt32Array()
 
 
 func _init(
@@ -58,18 +58,11 @@ func _init(
 	_judge = HandShapeJudge.new(hand_config, names)
 	for player in PLAYER_COUNT:
 		hands.append(HandModel.new(hand_config))
-	_pending_steps.resize(PLAYER_COUNT * AXIS_COUNT * HandTypes.Finger.size())
 	state = MatchState.new(match_config)
 
 
-static func slot_of(player: int, axis: HandTypes.Axis, finger: int) -> int:
-	return (player * AXIS_COUNT + axis) * HandTypes.Finger.size() + finger
-
-
-static func steps_per_unit(axis: HandTypes.Axis) -> int:
-	if axis == HandTypes.Axis.CURL:
-		return MatchRecord.STEPS_PER_CURL
-	return MatchRecord.STEPS_PER_DEGREE
+static func slot_of(player: int, finger: int) -> int:
+	return player * HandTypes.Finger.size() + finger
 
 
 func start(match_seed: int) -> void:
@@ -86,25 +79,26 @@ func can_operate() -> bool:
 	return phase == Phase.CALLING
 
 
-## amount は曲がり具合の変化量(正で曲がる)。操作できない間は捨てる。
-func drag(player: int, finger: HandTypes.Finger, amount: float) -> void:
-	_push(player, HandTypes.Axis.CURL, finger, amount)
+## 指の目標を curl(0.0〜1.0)にする。同じ指が続いたら最後の値だけ残す。操作できない間は捨てる。
+func reach(player: int, finger: HandTypes.Finger, curl: float) -> void:
+	if not can_operate():
+		return
+	var slot := slot_of(player, finger)
+	var step_count := roundi(
+		clampf(curl, HandModel.MIN_CURL, HandModel.MAX_CURL) * MatchRecord.STEPS_PER_CURL
+	)
+	var last := _pending_slots.size() - 1
+	if last >= 0 and _pending_slots[last] == slot:
+		_pending_steps[last] = step_count
+	else:
+		push_steps(slot, step_count)
 
 
-## degrees は向きの変化量(正で時計回り)。操作できない間は捨てる。
-func swing(player: int, finger: HandTypes.Finger, degrees: float) -> void:
-	_push(player, HandTypes.Axis.SWING, finger, degrees)
-
-
-func _push(player: int, axis: HandTypes.Axis, finger: HandTypes.Finger, amount: float) -> void:
-	if can_operate():
-		_pending_steps[slot_of(player, axis, finger)] += amount * steps_per_unit(axis)
-
-
-## リプレイ用。記録されたステップ数をそのまま次の tick() へ渡す。
+## リプレイ用。記録された目標をそのまま次の tick() へ渡す。
 func push_steps(slot: int, step_count: int) -> void:
-	if slot >= 0 and slot < _pending_steps.size():
-		_pending_steps[slot] += step_count
+	if slot >= 0 and slot < PLAYER_COUNT * HandTypes.Finger.size():
+		_pending_slots.append(slot)
+		_pending_steps.append(step_count)
 
 
 func tick() -> void:
@@ -131,7 +125,8 @@ func _start_round() -> void:
 	for hand in hands:
 		hand.randomize_pose(_rng)
 	_apply_effects()
-	_pending_steps.fill(0.0)
+	_pending_slots.clear()
+	_pending_steps.clear()
 	phase = Phase.CALLING
 	_phase_ticks = 0
 	round_started.emit()
@@ -143,27 +138,23 @@ func _apply_effects() -> void:
 		var hand := hands[player]
 		for finger in HandTypes.Finger.size():
 			var sleepy := effects.is_oversleeping(player, finger)
-			hand.drag_scales[finger] = _effect_table.oversleep_drag_scale if sleepy else 1.0
+			hand.speed_scales[finger] = _effect_table.oversleep_speed_scale if sleepy else 1.0
 		if effects.is_shot(player):
 			var shot := _rng.randi_range(0, HandTypes.Finger.size() - 1)
 			hand.set_curl(shot as HandTypes.Finger, HandModel.MAX_CURL)
 
 
 func _apply_pending() -> void:
-	for slot in _pending_steps.size():
-		var step_count := roundi(_pending_steps[slot])
-		if step_count == 0:
-			continue
-		_pending_steps[slot] -= step_count
-		record.append(tick_count, slot, step_count)
-		var finger_count := HandTypes.Finger.size()
+	var finger_count := HandTypes.Finger.size()
+	for i in _pending_slots.size():
+		var slot := _pending_slots[i]
+		record.append(tick_count, slot, _pending_steps[i])
 		@warning_ignore("integer_division")
-		var axis_slot := slot / finger_count
-		@warning_ignore("integer_division")
-		var player := axis_slot / AXIS_COUNT
-		var axis := (axis_slot % AXIS_COUNT) as HandTypes.Axis
-		var amount := float(step_count) / steps_per_unit(axis)
-		hands[player].move(axis, (slot % finger_count) as HandTypes.Finger, amount)
+		var player := slot / finger_count
+		var curl := float(_pending_steps[i]) / MatchRecord.STEPS_PER_CURL
+		hands[player].reach((slot % finger_count) as HandTypes.Finger, curl)
+	_pending_slots.clear()
+	_pending_steps.clear()
 
 
 func _tick_call() -> void:

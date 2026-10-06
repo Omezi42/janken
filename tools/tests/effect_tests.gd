@@ -75,10 +75,10 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 	while game.phase != LocalMatch.Phase.CALLING:
 		game.tick()
 	assert_true.call(HandModel.MAX_CURL in game.hands[1].curls, "撃たれた指は曲がりきりから始まる")
-	var scales := game.hands[0].drag_scales
+	var scales := game.hands[0].speed_scales
 	assert_true.call(
 		(
-			scales[HandTypes.Finger.INDEX] == _effects.oversleep_drag_scale
+			scales[HandTypes.Finger.INDEX] == _effects.oversleep_speed_scale
 			and scales[HandTypes.Finger.MIDDLE] == 1.0
 		),
 		"寝坊した指だけ動きが遅い %s" % [scales]
@@ -86,17 +86,15 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 	_play_round(game, [_curls_of("●●●●●"), _curls_of("●●●●●")])
 	while game.phase != LocalMatch.Phase.CALLING:
 		game.tick()
-	assert_true.call(game.hands[0].drag_scales[HandTypes.Finger.INDEX] == 1.0, "効果は1ラウンドで切れる")
+	assert_true.call(game.hands[0].speed_scales[HandTypes.Finger.INDEX] == 1.0, "効果は1ラウンドで切れる")
 
 
 ## 掛け声の終わりまで、両者の目標を goals へ寄せ続ける。
 func _play_round(game: LocalMatch, goals: Array) -> void:
 	while game.phase == LocalMatch.Phase.CALLING:
 		for player in LocalMatch.PLAYER_COUNT:
-			var hand := game.hands[player]
 			for finger in HandTypes.Finger.size():
-				var gap: float = goals[player][finger] - hand.targets[finger]
-				game.drag(player, finger as HandTypes.Finger, gap)
+				game.reach(player, finger as HandTypes.Finger, goals[player][finger])
 		game.tick()
 
 

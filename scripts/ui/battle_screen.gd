@@ -166,7 +166,7 @@ func _build() -> void:
 	_their_view.facing_down = true
 	_their_view.mouse_filter = MOUSE_FILTER_IGNORE
 	_my_view = _add_hand_view(_match.hands[MY_PLAYER], MY_HAND_RECT, MY_SLEEVE_COLOR)
-	_my_view.finger_moved.connect(_on_my_finger_moved)
+	_my_view.finger_reached.connect(_on_my_finger_reached)
 	_their_effect_label = _add_label(THEIR_EFFECT_RECT, EFFECT_FONT_SIZE)
 	_their_name_label = _add_label(THEIR_NAME_RECT, NAME_FONT_SIZE)
 	_their_tape = CensorTape.new()
@@ -249,11 +249,8 @@ func _start_match() -> void:
 		_match.start(_seed_rng.randi())
 
 
-func _on_my_finger_moved(
-	finger: HandTypes.Finger, curl_amount: float, swing_degrees: float
-) -> void:
-	_match.drag(MY_PLAYER, finger, curl_amount)
-	_match.swing(MY_PLAYER, finger, swing_degrees)
+func _on_my_finger_reached(finger: HandTypes.Finger, curl: float) -> void:
+	_match.reach(MY_PLAYER, finger, curl)
 
 
 func _on_round_started() -> void:

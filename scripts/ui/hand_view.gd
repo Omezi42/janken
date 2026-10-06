@@ -1,11 +1,12 @@
 class_name HandView
 extends Control
-## HandModel をマンガ風のゴムホースの手で描き、interactive なら指のドラッグを finger_moved で知らせる
+## HandModel をマンガ風のゴムホースの手で描き、interactive ならなぞりを finger_reached で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
+## なぞり: 伸びきった指先のx座標の中点で縦の帯に分けて指を選び、ポインタの高さへ指先の高さを合わせる曲がり具合を知らせる。
 
-## curl_amount は曲がり具合の変化量(正で曲がる)、swing_degrees は向きの変化量(正で時計回り)。
-signal finger_moved(finger: HandTypes.Finger, curl_amount: float, swing_degrees: float)
+## curl はポインタの高さに指先が来る曲がり具合(0.0〜1.0)。
+signal finger_reached(finger: HandTypes.Finger, curl: float)
 
 
 class Spark:
@@ -14,9 +15,9 @@ class Spark:
 	var life: float
 
 
-const UNIT_RATIO := 0.19
+const UNIT_RATIO := 0.23
 ## 手のひらの中心(このノードの中心から手首の側へ)。
-const PALM_CENTER := Vector2(0.0, 0.55)
+const PALM_CENTER := Vector2(0.0, 0.8)
 const PALM_SIZE := Vector2(2.0, 1.7)
 const PALM_CORNER := 0.6
 const WRIST_WIDTH := 1.3
@@ -26,26 +27,29 @@ const SLEEVE_START := 1.45
 const SLEEVE_WIDTH := 1.75
 const SLEEVE_STRIPE := Vector2(0.12, 0.14)
 const OUTLINE_WIDTH := 0.06
-## 指の付け根(手のひらの下に隠れる位置)・自然な向き(度。上が0で時計回り)・伸びきりの長さ・太さ。親指から小指の順。
+## 指の付け根(手のひらの下に隠れる位置)・向き(度。上が0で時計回り)・伸びきりの長さ・太さ。親指から小指の順。
+## 指先の間を広げ、なぞりの帯の幅をスマホで指先1つ分以上にする(GameDesign 6.1節)。
 const FINGER_BASES := [
-	Vector2(-0.8, 0.15),
-	Vector2(-0.66, -0.6),
-	Vector2(-0.22, -0.68),
-	Vector2(0.24, -0.64),
-	Vector2(0.66, -0.52),
+	Vector2(-0.85, 0.15),
+	Vector2(-0.72, -0.6),
+	Vector2(-0.24, -0.7),
+	Vector2(0.24, -0.66),
+	Vector2(0.7, -0.52),
 ]
-const FINGER_ANGLES := [-55.0, -8.0, -1.0, 6.0, 13.0]
-const FINGER_LENGTHS := [1.2, 1.5, 1.65, 1.55, 1.25]
+const FINGER_ANGLES := [-50.0, -16.0, -3.0, 10.0, 22.0]
+const FINGER_LENGTHS := [1.25, 1.5, 1.65, 1.55, 1.25]
 const FINGER_WIDTHS := [0.44, 0.38, 0.39, 0.37, 0.33]
 ## 指先の太さ(付け根に対する比)。
 const TIP_WIDTH_RATIO := 0.85
 ## 曲がりきった指の見える長さ(伸びきりに対する比)と、太る割合。
 const CURLED_LENGTH_RATIO := 0.3
 const CURLED_FATTEN := 0.15
-## 横へ引いて向きを変える半径の下限(伸びきりの長さに対する比。短い指が敏感になりすぎないように)。
-const MIN_SWING_RADIUS_RATIO := 0.5
-## 指を掴める範囲(指の太さに対する比)。
-const GRAB_WIDTH_RATIO := 1.5
+## 速くなぞったとき、前回の位置から今の位置までを区切る間隔(帯を飛ばさないように)。
+const SWEEP_SPACING := 0.1
+## 触っている指がポインタの方へ傾く角度の上限(度)・追いつく速さ・付け根から測る距離の下限(伸びきりの長さに対する比)。
+const LEAN_MAX := 12.0
+const LEAN_SPEED := 18.0
+const LEAN_MIN_REACH := 0.5
 ## 関節のしわの位置(付け根からの比)と長さ(太さに対する比)。
 const CREASE_FRACTIONS := [0.5, 0.75]
 const CREASE_LENGTH := 0.5
@@ -62,7 +66,7 @@ const IDLE_PHASE := 1.3
 const TREMBLE := 0.05
 const TREMBLE_SPEED := 40.0
 const HALF_TINT := 0.5
-## 掴んでいる指の光る縁の太さ。
+## 触っている指の光る縁の太さ。
 const GLOW_WIDTH := 0.1
 ## 伸び・曲がりの範囲に入ったときの火花(数・速さ・寿命・大きさ)。
 const SPARK_COUNT := 7
@@ -110,6 +114,7 @@ const MOSAIC_COLORS := [SKIN_COLOR, CREASE_COLOR, Color("e8a984")]
 
 const NO_FINGER := -1
 const MOUSE_POINTER := -1
+const NO_POINTER := -2
 const NO_STATE := -1
 
 var interactive := false
@@ -118,14 +123,19 @@ var censored := false
 ## 相手の手は上下を逆にして、指先を画面の下へ向ける。
 var facing_down := false
 var sleeve_color := Color.WHITE
-## 演出用。pose_offset は手の大きさに対する比で、-Y が相手の方向。入力の当たり判定にも同じ変換を使う。
+## 演出用。pose_offset は手の大きさに対する比で、-Y が相手の方向。入力の対応には使わない。
 var pose_offset := Vector2.ZERO
 var pose_scale := 1.0
 var pose_tilt := 0.0
 var _model: HandModel
 var _config: HandConfig
-## ポインタ(マウスは MOUSE_POINTER、タッチは番号)→ 掴んでいる指。
-var _grabs := {}
+## なぞっているポインタ(マウスは MOUSE_POINTER、タッチは番号)。同時に1つだけ。
+var _pointer := NO_POINTER
+## なぞっているポインタの位置(演出を除いた手のローカル座標)と、その帯の指。
+var _pointer_local := Vector2.ZERO
+var _touched := NO_FINGER
+## 見た目だけの傾き(度)。
+var _leans := PackedFloat32Array()
 var _softs: Array[SoftFinger] = []
 var _curves: Array[PackedVector2Array] = []
 var _states: Array[int] = []
@@ -148,6 +158,7 @@ func bind(model: HandModel, config: HandConfig) -> void:
 		_softs.append(SoftFinger.new())
 		_curves.append(PackedVector2Array())
 		_states.append(NO_STATE)
+	_leans.resize(HandTypes.Finger.size())
 	_rng.randomize()
 
 
@@ -159,7 +170,8 @@ func reset_pose() -> void:
 	pose_scale = 1.0
 	pose_tilt = 0.0
 	modulate = Color.WHITE
-	_grabs.clear()
+	_release()
+	_leans.fill(0.0)
 	_sparks.clear()
 	for i in _softs.size():
 		_softs[i].reset()
@@ -210,10 +222,11 @@ func _process(delta: float) -> void:
 	if _model == null:
 		return
 	if not interactive:
-		_grabs.clear()
+		_release()
 	var step := minf(delta, MAX_VISUAL_DELTA)
 	_time += step
 	var unit := _unit()
+	_update_leans(step)
 	for i in HandTypes.Finger.size():
 		var state := HandShapeJudge.state_of(_config, _model.curls[i])
 		var base: Vector2 = FINGER_BASES[i] * unit
@@ -238,9 +251,8 @@ func _draw() -> void:
 	var unit := _unit()
 	draw_set_transform_matrix(_hand_transform())
 	_draw_arm(unit)
-	var grabbed := _grabs.values()
 	for i in HandTypes.Finger.size():
-		_draw_finger(i, unit, i in grabbed)
+		_draw_finger(i, unit, i == _touched)
 	_draw_palm(unit)
 	if censored:
 		_draw_mosaic(unit)
@@ -282,13 +294,13 @@ func _set_box(box: StyleBoxFlat, color: Color, border: int, corner: int) -> void
 	box.anti_aliasing = true
 
 
-func _draw_finger(finger: int, unit: float, grabbed: bool) -> void:
+func _draw_finger(finger: int, unit: float, touched: bool) -> void:
 	var curve := _curves[finger]
 	var curl := _model.curls[finger]
 	var width: float = FINGER_WIDTHS[finger] * unit * (1.0 + CURLED_FATTEN * curl)
 	var tip_width := width * TIP_WIDTH_RATIO
 	var outline := OUTLINE_WIDTH * unit
-	if grabbed:
+	if touched:
 		_draw_tube(curve, width, tip_width, outline + GLOW_WIDTH * unit, GLOW_COLOR)
 	_draw_tube(curve, width, tip_width, outline, OUTLINE_COLOR)
 	var skin := SKIN_COLOR
@@ -398,11 +410,11 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if event.device == InputEvent.DEVICE_ID_EMULATION:
 			return
-		_move(MOUSE_POINTER, event.relative)
+		_sweep(MOUSE_POINTER, event.position)
 	elif event is InputEventScreenTouch:
 		_press(event.index, event.position, event.pressed)
 	elif event is InputEventScreenDrag:
-		_move(event.index, event.relative)
+		_sweep(event.index, event.position)
 	else:
 		return
 	accept_event()
@@ -410,42 +422,83 @@ func _gui_input(event: InputEvent) -> void:
 
 func _press(pointer: int, at: Vector2, pressed: bool) -> void:
 	if not pressed:
-		_grabs.erase(pointer)
+		if pointer == _pointer:
+			_release()
 		return
-	var finger := _finger_at(at)
-	if finger != NO_FINGER:
-		_grabs[pointer] = finger
-
-
-## 指の向きに沿う動きを曲がり具合へ、直交する動きを向きへ変える(指先がポインタに付いてくる)。
-func _move(pointer: int, relative: Vector2) -> void:
-	if not _grabs.has(pointer):
+	if _pointer != NO_POINTER:
 		return
-	var finger: int = _grabs[pointer]
-	var unit := _unit()
-	var motion := _hand_transform().affine_inverse().basis_xform(relative)
-	var direction := _direction(finger)
-	var length: float = FINGER_LENGTHS[finger] * unit
-	var curl_amount := -motion.dot(direction) / (length * (1.0 - CURLED_LENGTH_RATIO))
-	var radius := maxf(_visible_length(finger, unit), length * MIN_SWING_RADIUS_RATIO)
-	var swing_degrees := rad_to_deg(motion.dot(direction.rotated(PI / 2.0)) / radius)
-	finger_moved.emit(finger as HandTypes.Finger, curl_amount, swing_degrees)
+	_pointer = pointer
+	_pointer_local = _rest_transform().affine_inverse() * at
+	_reach_at(_pointer_local)
 
 
-func _finger_at(at: Vector2) -> int:
+## 前回の位置から今の位置までを SWEEP_SPACING ごとに区切り、通った帯の指を順に知らせる。
+func _sweep(pointer: int, at: Vector2) -> void:
+	if pointer != _pointer:
+		return
+	var to := _rest_transform().affine_inverse() * at
+	var count := maxi(ceili(_pointer_local.distance_to(to) / (SWEEP_SPACING * _unit())), 1)
+	for i in range(1, count + 1):
+		_reach_at(_pointer_local.lerp(to, float(i) / count))
+	_pointer_local = to
+
+
+func _reach_at(local: Vector2) -> void:
 	var unit := _unit()
-	var local := _hand_transform().affine_inverse() * at
-	var nearest := NO_FINGER
-	var nearest_distance := INF
-	for i in HandTypes.Finger.size():
-		var base: Vector2 = FINGER_BASES[i] * unit
-		var reach: Vector2 = base + _direction(i) * FINGER_LENGTHS[i] * unit
-		var closest := Geometry2D.get_closest_point_to_segment(local, base, reach)
-		var distance := local.distance_to(closest)
-		if distance < FINGER_WIDTHS[i] * unit * GRAB_WIDTH_RATIO and distance < nearest_distance:
-			nearest_distance = distance
-			nearest = i
-	return nearest
+	_touched = _finger_at(local.x / unit)
+	finger_reached.emit(_touched as HandTypes.Finger, _curl_at(_touched, local.y / unit))
+
+
+func _release() -> void:
+	_pointer = NO_POINTER
+	_touched = NO_FINGER
+
+
+## x は手の大きさに対する比。伸びきった指先のx座標の中点で分けた帯のうち、x が入る帯の指。
+func _finger_at(x: float) -> int:
+	var last := HandTypes.Finger.size() - 1
+	for i in last:
+		var border := (
+			(_rest_tip(i, HandModel.MIN_CURL).x + _rest_tip(i + 1, HandModel.MIN_CURL).x) / 2.0
+		)
+		if x < border:
+			return i
+	return last
+
+
+## y は手の大きさに対する比。指先の高さが y になる曲がり具合(範囲の外は端で止める)。
+func _curl_at(finger: int, y: float) -> float:
+	var extended := _rest_tip(finger, HandModel.MIN_CURL).y
+	var curled := _rest_tip(finger, HandModel.MAX_CURL).y
+	return clampf((y - extended) / (curled - extended), HandModel.MIN_CURL, HandModel.MAX_CURL)
+
+
+## 傾いていない指の、曲がり具合 curl での指先の位置(手の大きさに対する比)。
+func _rest_tip(finger: int, curl: float) -> Vector2:
+	var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger]))
+	var length: float = FINGER_LENGTHS[finger] * lerpf(1.0, CURLED_LENGTH_RATIO, curl)
+	var base: Vector2 = FINGER_BASES[finger]
+	return base + direction * length
+
+
+## 触っている指をポインタの方へ傾け、離れた指を戻す(見た目だけ)。
+func _update_leans(delta: float) -> void:
+	var follow := 1.0 - exp(-LEAN_SPEED * delta)
+	for i in _leans.size():
+		var goal := 0.0
+		if i == _touched:
+			var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[i]))
+			var offset: Vector2 = _pointer_local / _unit() - FINGER_BASES[i]
+			var reach: float = maxf(offset.dot(direction), FINGER_LENGTHS[i] * LEAN_MIN_REACH)
+			var side := offset.dot(direction.rotated(PI / 2.0))
+			goal = clampf(rad_to_deg(atan2(side, reach)), -LEAN_MAX, LEAN_MAX)
+		_leans[i] = lerpf(_leans[i], goal, follow)
+
+
+## 演出(弾み・突き出し)を除いた手の位置。入力の対応に使う(拍で弾んでも同じ高さなら同じ曲がり具合にするため)。
+func _rest_transform() -> Transform2D:
+	var turn := PI if facing_down else 0.0
+	return Transform2D(turn, size / 2.0) * Transform2D(0.0, PALM_CENTER * _unit())
 
 
 func _hand_transform() -> Transform2D:
@@ -463,7 +516,7 @@ func _unit() -> float:
 
 
 func _direction(finger: int) -> Vector2:
-	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger] + _model.swings[finger]))
+	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger] + _leans[finger]))
 
 
 func _visible_length(finger: int, unit: float) -> float:

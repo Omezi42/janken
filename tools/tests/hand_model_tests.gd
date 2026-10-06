@@ -1,12 +1,13 @@
 extends RefCounted
-## HandModel / FingerAxis(GameDesign 6.2節・6.3節)。
+## HandModel(GameDesign 6.2節・6.3節)。
 
 const STEP := 1.0 / 60.0
 const SETTLE_SECONDS := 3.0
+## 寝坊の速さを比べる時間(ばねが目標へ届く前)。
+const EARLY_SECONDS := 0.1
 const TOLERANCE := 0.001
 const RANDOM_TRIALS := 50
-## 向きのばねが「何度も揺れる」とみなす行き過ぎの割合。
-const WOBBLY_OVERSHOOT := 0.3
+const SLEEPY_SCALE := 0.5
 
 var _config: HandConfig = load("res://data/hand_config.tres")
 
@@ -16,45 +17,47 @@ func run(assert_true: Callable) -> void:
 	_test_linkage_at_edge(assert_true)
 	_test_inertia(assert_true)
 	_test_stops_at_edge(assert_true)
-	_test_swing_linkage(assert_true)
-	_test_swing_wobbles(assert_true)
+	_test_speed_scale(assert_true)
 	_test_random_pose(assert_true)
 
 
 func _test_linkage(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.5]))
-	hand.drag(HandTypes.Finger.MIDDLE, 0.4)
+	var hand := _hand_at([0.5, 0.5, 0.5, 0.5, 0.5])
+	hand.reach(HandTypes.Finger.MIDDLE, 0.9)
 	var expected := [0.436, 0.66, 0.9, 0.66, 0.58]
 	assert_true.call(_close(hand.targets, expected), "連動は隣へ掛け算で伝わり、負なら逆向き %s" % [hand.targets])
 	assert_true.call(
-		_close(hand.curls, [0.5, 0.5, 0.9, 0.5, 0.5]), "掴んだ指だけ直接動き、つられた指は目標だけ動く %s" % [hand.curls]
+		_close(hand.curls, [0.5, 0.5, 0.5, 0.5, 0.5]), "触った指も目標だけが動き、曲がり具合はばねで追う %s" % [hand.curls]
 	)
 
 
 func _test_linkage_at_edge(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.8]))
-	hand.drag(HandTypes.Finger.PINKY, 0.5)
+	var hand := _hand_at([0.5, 0.5, 0.5, 0.5, 0.8])
+	hand.reach(HandTypes.Finger.PINKY, 1.3)
 	assert_true.call(_close(hand.targets, [0.4936, 0.516, 0.54, 0.6, 1.0]), "端で止まった分は連動しない")
 
 
 func _test_inertia(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.5]))
-	hand.drag(HandTypes.Finger.MIDDLE, 0.4)
+	var hand := _hand_at([0.5, 0.5, 0.5, 0.5, 0.5])
+	hand.reach(HandTypes.Finger.MIDDLE, 0.9)
+	var middle_target := hand.targets[HandTypes.Finger.MIDDLE]
 	var ring_target := hand.targets[HandTypes.Finger.RING]
-	var peak := 0.0
-	var grabbed_still := true
+	var middle_peak := 0.0
+	var ring_peak := 0.0
 	for i in int(SETTLE_SECONDS / STEP):
 		hand.step(STEP)
-		peak = maxf(peak, hand.curls[HandTypes.Finger.RING])
-		grabbed_still = grabbed_still and is_equal_approx(hand.curls[HandTypes.Finger.MIDDLE], 0.9)
-	assert_true.call(peak > ring_target + TOLERANCE, "つられた指は慣性で目標を行き過ぎる(最大 %f)" % peak)
-	assert_true.call(grabbed_still, "掴んだ指は行き過ぎない")
+		middle_peak = maxf(middle_peak, hand.curls[HandTypes.Finger.MIDDLE])
+		ring_peak = maxf(ring_peak, hand.curls[HandTypes.Finger.RING])
+	assert_true.call(
+		middle_peak > middle_target + TOLERANCE, "触った指も慣性で目標を行き過ぎる(最大 %f)" % middle_peak
+	)
+	assert_true.call(ring_peak > ring_target + TOLERANCE, "つられた指も慣性で目標を行き過ぎる(最大 %f)" % ring_peak)
 	assert_true.call(_close(hand.curls, hand.targets), "やがて目標に落ち着く %s" % [hand.curls])
 
 
 func _test_stops_at_edge(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.9, 0.5]))
-	hand.drag(HandTypes.Finger.MIDDLE, 0.5)
+	var hand := _hand_at([0.5, 0.5, 0.5, 0.9, 0.5])
+	hand.reach(HandTypes.Finger.MIDDLE, 1.0)
 	var inside := true
 	for i in int(SETTLE_SECONDS / STEP):
 		hand.step(STEP)
@@ -65,28 +68,23 @@ func _test_stops_at_edge(assert_true: Callable) -> void:
 	)
 
 
-func _test_swing_linkage(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.5]))
-	hand.swing(HandTypes.Finger.INDEX, 10.0)
-	var targets := hand.swing_axis.targets
-	assert_true.call(_close(targets, [2.0, 10.0, 5.0, 2.5, 1.25]), "向きも隣へ掛け算で連動する %s" % [targets])
-	assert_true.call(_close(hand.curls, [0.5, 0.5, 0.5, 0.5, 0.5]), "向きを動かしても曲がり具合は変わらない")
-	hand.swing(HandTypes.Finger.INDEX, 100.0)
+func _test_speed_scale(assert_true: Callable) -> void:
+	var awake := _hand_at([0.0, 0.0, 0.0, 0.0, 0.0])
+	var sleepy := _hand_at([0.0, 0.0, 0.0, 0.0, 0.0])
+	sleepy.speed_scales[HandTypes.Finger.INDEX] = SLEEPY_SCALE
+	for hand in [awake, sleepy]:
+		hand.reach(HandTypes.Finger.INDEX, HandModel.MAX_CURL)
+	for i in int(EARLY_SECONDS / STEP):
+		awake.step(STEP)
+		sleepy.step(STEP)
+	var index := HandTypes.Finger.INDEX
 	assert_true.call(
-		is_equal_approx(hand.swings[HandTypes.Finger.INDEX], _config.swing_range_degrees),
-		"向きは可動範囲で止まる"
+		sleepy.curls[index] < awake.curls[index],
+		"寝坊した指は遅い (%f < %f)" % [sleepy.curls[index], awake.curls[index]]
 	)
-
-
-func _test_swing_wobbles(assert_true: Callable) -> void:
-	var hand := _hand_at(PackedFloat64Array([0.5, 0.5, 0.5, 0.5, 0.5]))
-	hand.swing(HandTypes.Finger.INDEX, 10.0)
-	var target := hand.swing_axis.targets[HandTypes.Finger.MIDDLE]
-	var peak := 0.0
 	for i in int(SETTLE_SECONDS / STEP):
-		hand.step(STEP)
-		peak = maxf(peak, hand.swings[HandTypes.Finger.MIDDLE])
-	assert_true.call(peak > target * (1.0 + WOBBLY_OVERSHOOT), "向きのばねは柔らかく大きく行き過ぎる(最大 %f)" % peak)
+		sleepy.step(STEP)
+	assert_true.call(_close(sleepy.curls, sleepy.targets), "寝坊した指もやがて目標に届く")
 
 
 func _test_random_pose(assert_true: Callable) -> void:
@@ -94,20 +92,17 @@ func _test_random_pose(assert_true: Callable) -> void:
 	rng.seed = 1
 	var hand := HandModel.new(_config)
 	var in_range := true
-	var swing_range := _config.swing_range_degrees
 	for trial in RANDOM_TRIALS:
 		hand.randomize_pose(rng)
 		for curl in hand.curls:
 			in_range = in_range and curl >= HandModel.MIN_CURL and curl <= HandModel.MAX_CURL
-		for swing in hand.swings:
-			in_range = in_range and absf(swing) <= swing_range
-	assert_true.call(in_range, "初期配置は曲がり具合 0〜1、向きは可動範囲の中")
+	assert_true.call(in_range, "初期配置は曲がり具合 0〜1")
 	assert_true.call(_close(hand.curls, hand.targets), "初期配置では目標と曲がり具合が一致")
 
 
-func _hand_at(pose: PackedFloat64Array) -> HandModel:
+func _hand_at(pose: Array) -> HandModel:
 	var hand := HandModel.new(_config)
-	hand.set_pose(pose)
+	hand.set_pose(PackedFloat64Array(pose))
 	return hand
 
 

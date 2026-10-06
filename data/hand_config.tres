@@ -10,7 +10,3 @@ name_snap_border = 0.5
 linkage_strengths = Array[float]([-0.4, 0.4, 0.4, 0.5])
 spring_stiffness = 120.0
 spring_damping = 12.0
-swing_range_degrees = 30.0
-swing_linkage_strengths = Array[float]([0.2, 0.5, 0.5, 0.5])
-swing_spring_stiffness = 60.0
-swing_spring_damping = 2.5
