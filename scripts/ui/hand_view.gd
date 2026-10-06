@@ -1,130 +1,471 @@
 class_name HandView
 extends Control
-## HandModel を仮の図形で描き、interactive なら指のドラッグを finger_dragged で知らせる(Architecture 6章)。
-## HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
-## 手首の回転 0° で指先が画面の上を向く。寸法はすべて手のひらの半径に対する比。
+## HandModel をマンガ風のゴムホースの手で描き、interactive なら指のドラッグを finger_moved で知らせる
+## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
+## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
 
-## amount は曲がり具合の変化量(正で曲がる)。
-signal finger_dragged(finger: HandTypes.Finger, amount: float)
+## curl_amount は曲がり具合の変化量(正で曲がる)、swing_degrees は向きの変化量(正で時計回り)。
+signal finger_moved(finger: HandTypes.Finger, curl_amount: float, swing_degrees: float)
 
-## 手のひらの半径(このノードの短辺に対する比)。
-const PALM_RADIUS_RATIO := 0.16
-## 指の付け根の位置(手のひらの中心からの距離)。
-const FINGER_BASE_RATIO := 0.6
-## 伸びきった指の長さ。親指から小指の順。
-const FINGER_LENGTH_RATIOS := [1.1, 1.5, 1.65, 1.5, 1.2]
-const FINGER_WIDTH_RATIO := 0.34
-## 指の向き(度。上を 0 として時計回り)。親指から小指の順。
-const FINGER_ANGLES := [-75.0, -27.0, -9.0, 9.0, 27.0]
-## 曲がりきった指の見える長さ(伸びきりに対する比)。
-const CURLED_LENGTH_RATIO := 0.25
+
+class Spark:
+	var position: Vector2
+	var velocity: Vector2
+	var life: float
+
+
+const UNIT_RATIO := 0.19
+## 手のひらの中心(このノードの中心から手首の側へ)。
+const PALM_CENTER := Vector2(0.0, 0.55)
+const PALM_SIZE := Vector2(2.0, 1.7)
+const PALM_CORNER := 0.6
+const WRIST_WIDTH := 1.3
+## 手首と袖を描く長さ(手のひらの中心から。画面の端より外まで伸ばす)。
+const ARM_LENGTH := 4.0
+const SLEEVE_START := 1.45
+const SLEEVE_WIDTH := 1.75
+const SLEEVE_STRIPE := Vector2(0.12, 0.14)
+const OUTLINE_WIDTH := 0.06
+## 指の付け根(手のひらの下に隠れる位置)・自然な向き(度。上が0で時計回り)・伸びきりの長さ・太さ。親指から小指の順。
+const FINGER_BASES := [
+	Vector2(-0.8, 0.15),
+	Vector2(-0.66, -0.6),
+	Vector2(-0.22, -0.68),
+	Vector2(0.24, -0.64),
+	Vector2(0.66, -0.52),
+]
+const FINGER_ANGLES := [-55.0, -8.0, -1.0, 6.0, 13.0]
+const FINGER_LENGTHS := [1.2, 1.5, 1.65, 1.55, 1.25]
+const FINGER_WIDTHS := [0.44, 0.38, 0.39, 0.37, 0.33]
+## 指先の太さ(付け根に対する比)。
+const TIP_WIDTH_RATIO := 0.85
+## 曲がりきった指の見える長さ(伸びきりに対する比)と、太る割合。
+const CURLED_LENGTH_RATIO := 0.3
+const CURLED_FATTEN := 0.15
+## 横へ引いて向きを変える半径の下限(伸びきりの長さに対する比。短い指が敏感になりすぎないように)。
+const MIN_SWING_RADIUS_RATIO := 0.5
 ## 指を掴める範囲(指の太さに対する比)。
-const GRAB_WIDTH_RATIO := 1.2
-
-const SKIN_COLOR := Color("f2c9a0")
-const CURLED_SKIN_COLOR := Color("b9845a")
-const PALM_COLOR := Color("e8b98c")
-const NAIL_COLOR := Color("fbe8dc")
-## モザイクの1マスの大きさと、覆う範囲(手のひらの中心からの距離)。
-const MOSAIC_CELL_RATIO := 0.4
-const MOSAIC_REACH_RATIO := 2.4
-const MOSAIC_COLORS := [SKIN_COLOR, PALM_COLOR, CURLED_SKIN_COLOR]
+const GRAB_WIDTH_RATIO := 1.5
+## 関節のしわの位置(付け根からの比)と長さ(太さに対する比)。
+const CREASE_FRACTIONS := [0.5, 0.75]
+const CREASE_LENGTH := 0.5
+## 爪の大きさ(指先の太さに対する比)、指先から奥へずらす量(同)、見えなくなる曲がり具合。
+const NAIL_SIZE := Vector2(0.3, 0.4)
+const NAIL_INSET := 0.35
+const NAIL_HIDDEN_CURL := 0.5
+const NAIL_SEGMENTS := 16
+## 止まっていてもうねる揺れ(指先の横ずれ・速さ・指ごとのずれ)。
+const IDLE_SWAY := 0.07
+const IDLE_SPEED := 2.3
+const IDLE_PHASE := 1.3
+## 中途半端な指の震え(指先の横ずれ・速さ)と赤みの割合。
+const TREMBLE := 0.05
+const TREMBLE_SPEED := 40.0
+const HALF_TINT := 0.5
+## 掴んでいる指の光る縁の太さ。
+const GLOW_WIDTH := 0.1
+## 伸び・曲がりの範囲に入ったときの火花(数・速さ・寿命・大きさ)。
+const SPARK_COUNT := 7
+const SPARK_SPEED := 2.6
+const SPARK_LIFE := 0.35
+const SPARK_SIZE := 0.08
+## 見た目の揺れを1フレームで進める時間の上限(処理落ちでばねが暴れないように)。
+const MAX_VISUAL_DELTA := 1.0 / 30.0
+## モザイクの1マスの大きさ、覆う範囲の中心と半径。
+const MOSAIC_CELL := 0.4
+const MOSAIC_CENTER := Vector2(0.0, -0.6)
+const MOSAIC_REACH := 2.6
 ## マスの色を散らすための係数(互いに素な数ならよい)。
 const MOSAIC_HASH := Vector2i(7, 13)
 
+## 拍に合わせて弾む(前へ出る量・大きさ・秒)。
+const BEAT_KICK := 0.12
+const BEAT_SCALE := 1.05
+const BEAT_SECONDS := 0.09
+## ぽんで相手へ突き出す(量・大きさ・秒)。
+const THRUST := 0.35
+const THRUST_SCALE := 1.12
+const THRUST_SECONDS := 0.12
+## 勝ち: 跳ねる(高さ・秒・回数)。負け: しぼむ(大きさ・色・下がる量・秒)。あいこ: 揺れる(角度・秒・回数)。
+const HOP_HEIGHT := 0.3
+const HOP_SECONDS := 0.14
+const HOP_COUNT := 3
+const SLUMP_SCALE := 0.86
+const SLUMP_COLOR := Color(0.5, 0.5, 0.58)
+const SLUMP_DROP := 0.25
+const SLUMP_SECONDS := 0.4
+const WOBBLE_TILT := 0.12
+const WOBBLE_SECONDS := 0.08
+const WOBBLE_COUNT := 3
+
+const SKIN_COLOR := Color("f7c59f")
+const CREASE_COLOR := Color("cf8a62")
+const OUTLINE_COLOR := Color("3b2416")
+const NAIL_COLOR := Color("ffe6dc")
+const HALF_COLOR := Color("ff4a3d")
+const GLOW_COLOR := Color("fff27a")
+const SPARK_COLOR := Color("fff7a8")
+const SLEEVE_STRIPE_COLOR := Color(1.0, 1.0, 1.0, 0.45)
+const MOSAIC_COLORS := [SKIN_COLOR, CREASE_COLOR, Color("e8a984")]
+
 const NO_FINGER := -1
+const MOUSE_POINTER := -1
+const NO_STATE := -1
 
 var interactive := false
 ## 自主規制(GameDesign 2.5節)で手をモザイクで覆う。
 var censored := false
+## 相手の手は上下を逆にして、指先を画面の下へ向ける。
+var facing_down := false
+var sleeve_color := Color.WHITE
+## 演出用。pose_offset は手の大きさに対する比で、-Y が相手の方向。入力の当たり判定にも同じ変換を使う。
+var pose_offset := Vector2.ZERO
+var pose_scale := 1.0
+var pose_tilt := 0.0
 var _model: HandModel
-var _dragging := NO_FINGER
+var _config: HandConfig
+## ポインタ(マウスは MOUSE_POINTER、タッチは番号)→ 掴んでいる指。
+var _grabs := {}
+var _softs: Array[SoftFinger] = []
+var _curves: Array[PackedVector2Array] = []
+var _states: Array[int] = []
+var _sparks: Array[Spark] = []
+var _time := 0.0
+var _tween: Tween
+var _palm_box := StyleBoxFlat.new()
+var _wrist_box := StyleBoxFlat.new()
+var _sleeve_box := StyleBoxFlat.new()
+var _rng := RandomNumberGenerator.new()
 
 
-func bind(model: HandModel) -> void:
+func bind(model: HandModel, config: HandConfig) -> void:
 	_model = model
-	queue_redraw()
+	_config = config
+	_softs.clear()
+	_curves.clear()
+	_states.clear()
+	for i in HandTypes.Finger.size():
+		_softs.append(SoftFinger.new())
+		_curves.append(PackedVector2Array())
+		_states.append(NO_STATE)
+	_rng.randomize()
 
 
-func _process(_delta: float) -> void:
+## ラウンド開始時に演出と揺れを止め、手を初期配置のまま見せる。
+func reset_pose() -> void:
+	if _tween != null:
+		_tween.kill()
+	pose_offset = Vector2.ZERO
+	pose_scale = 1.0
+	pose_tilt = 0.0
+	modulate = Color.WHITE
+	_grabs.clear()
+	_sparks.clear()
+	for i in _softs.size():
+		_softs[i].reset()
+		_states[i] = NO_STATE
+
+
+## 掛け声の拍に合わせて前へ弾む。
+func beat() -> void:
+	var tween := _restart_tween()
+	tween.tween_property(self, "pose_offset", Vector2(0.0, -BEAT_KICK), BEAT_SECONDS)
+	tween.parallel().tween_property(self, "pose_scale", BEAT_SCALE, BEAT_SECONDS)
+	tween.tween_property(self, "pose_offset", Vector2.ZERO, BEAT_SECONDS)
+	tween.parallel().tween_property(self, "pose_scale", 1.0, BEAT_SECONDS)
+
+
+## ぽんで相手へ突き出し、outcome(この手から見た勝敗)に応じて跳ねる・しぼむ・揺れる。
+func show_result(outcome: HandTypes.Outcome) -> void:
+	var tween := _restart_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "pose_offset", Vector2(0.0, -THRUST), THRUST_SECONDS)
+	tween.parallel().tween_property(self, "pose_scale", THRUST_SCALE, THRUST_SECONDS)
+	tween.set_trans(Tween.TRANS_SINE)
+	match outcome:
+		HandTypes.Outcome.WIN:
+			for i in HOP_COUNT:
+				var top := Vector2(0.0, -THRUST - HOP_HEIGHT)
+				tween.tween_property(self, "pose_offset", top, HOP_SECONDS)
+				tween.tween_property(self, "pose_offset", Vector2(0.0, -THRUST), HOP_SECONDS)
+		HandTypes.Outcome.LOSE:
+			tween.tween_property(self, "pose_offset", Vector2(0.0, SLUMP_DROP), SLUMP_SECONDS)
+			tween.parallel().tween_property(self, "pose_scale", SLUMP_SCALE, SLUMP_SECONDS)
+			tween.parallel().tween_property(self, "modulate", SLUMP_COLOR, SLUMP_SECONDS)
+		HandTypes.Outcome.DRAW:
+			for i in WOBBLE_COUNT:
+				tween.tween_property(self, "pose_tilt", WOBBLE_TILT, WOBBLE_SECONDS)
+				tween.tween_property(self, "pose_tilt", -WOBBLE_TILT, WOBBLE_SECONDS)
+			tween.tween_property(self, "pose_tilt", 0.0, WOBBLE_SECONDS)
+
+
+func _restart_tween() -> Tween:
+	if _tween != null:
+		_tween.kill()
+	_tween = create_tween()
+	return _tween
+
+
+func _process(delta: float) -> void:
+	if _model == null:
+		return
+	if not interactive:
+		_grabs.clear()
+	var step := minf(delta, MAX_VISUAL_DELTA)
+	_time += step
+	var unit := _unit()
+	for i in HandTypes.Finger.size():
+		var state := HandShapeJudge.state_of(_config, _model.curls[i])
+		var base: Vector2 = FINGER_BASES[i] * unit
+		var tip := base + _direction(i) * _visible_length(i, unit)
+		if state != _states[i]:
+			if _states[i] != NO_STATE and state != HandTypes.FingerState.HALF and not censored:
+				_spawn_sparks(tip, unit)
+			_states[i] = state
+		var sway := sin(_time * IDLE_SPEED + i * IDLE_PHASE) * IDLE_SWAY * unit
+		_softs[i].update(base, tip, sway, step)
+		var shake := 0.0
+		if state == HandTypes.FingerState.HALF:
+			shake = sin(_time * TREMBLE_SPEED + i) * TREMBLE * unit
+		_curves[i] = _softs[i].curve(shake)
+	_update_sparks(step)
 	queue_redraw()
 
 
 func _draw() -> void:
-	if _model == null:
+	if _model == null or _curves.is_empty() or _curves[0].is_empty():
 		return
-	var radius := _palm_radius()
-	draw_set_transform(size / 2.0, deg_to_rad(_model.wrist_rotation_degrees))
-	for i in _model.curls.size():
-		var curl := _model.curls[i]
-		var direction := _finger_direction(i)
-		var base := direction * radius * FINGER_BASE_RATIO
-		var visible_length := _finger_length(i) * lerpf(1.0, CURLED_LENGTH_RATIO, curl)
-		var tip := base + direction * visible_length
-		var width := radius * FINGER_WIDTH_RATIO
-		var color := SKIN_COLOR.lerp(CURLED_SKIN_COLOR, curl)
-		draw_line(base, tip, color, width)
-		draw_circle(tip, width / 2.0, color)
-		draw_circle(tip, width / 2.0 * (1.0 - curl), NAIL_COLOR)
-	draw_circle(Vector2.ZERO, radius, PALM_COLOR)
+	var unit := _unit()
+	draw_set_transform_matrix(_hand_transform())
+	_draw_arm(unit)
+	var grabbed := _grabs.values()
+	for i in HandTypes.Finger.size():
+		_draw_finger(i, unit, i in grabbed)
+	_draw_palm(unit)
 	if censored:
-		_draw_mosaic(radius)
+		_draw_mosaic(unit)
+	else:
+		_draw_sparks(unit)
 
 
-func _draw_mosaic(radius: float) -> void:
-	draw_set_transform(size / 2.0)
-	var cell := radius * MOSAIC_CELL_RATIO
-	var reach := radius * MOSAIC_REACH_RATIO
+func _draw_arm(unit: float) -> void:
+	var outline := int(OUTLINE_WIDTH * unit)
+	_set_box(_wrist_box, SKIN_COLOR, outline, 0)
+	draw_style_box(
+		_wrist_box, Rect2(-WRIST_WIDTH / 2.0 * unit, 0.0, WRIST_WIDTH * unit, ARM_LENGTH * unit)
+	)
+	_set_box(_sleeve_box, sleeve_color, outline, int(OUTLINE_WIDTH * unit))
+	var sleeve := Rect2(
+		-SLEEVE_WIDTH / 2.0 * unit,
+		SLEEVE_START * unit,
+		SLEEVE_WIDTH * unit,
+		(ARM_LENGTH - SLEEVE_START) * unit
+	)
+	draw_style_box(_sleeve_box, sleeve)
+	var stripe := Rect2(
+		sleeve.position + Vector2(outline, SLEEVE_STRIPE.x * unit),
+		Vector2(sleeve.size.x - outline * 2, SLEEVE_STRIPE.y * unit)
+	)
+	draw_rect(stripe, SLEEVE_STRIPE_COLOR)
+
+
+func _draw_palm(unit: float) -> void:
+	_set_box(_palm_box, SKIN_COLOR, int(OUTLINE_WIDTH * unit), int(PALM_CORNER * unit))
+	draw_style_box(_palm_box, Rect2(-PALM_SIZE / 2.0 * unit, PALM_SIZE * unit))
+
+
+func _set_box(box: StyleBoxFlat, color: Color, border: int, corner: int) -> void:
+	box.bg_color = color
+	box.border_color = OUTLINE_COLOR
+	box.set_border_width_all(border)
+	box.set_corner_radius_all(corner)
+	box.anti_aliasing = true
+
+
+func _draw_finger(finger: int, unit: float, grabbed: bool) -> void:
+	var curve := _curves[finger]
+	var curl := _model.curls[finger]
+	var width: float = FINGER_WIDTHS[finger] * unit * (1.0 + CURLED_FATTEN * curl)
+	var tip_width := width * TIP_WIDTH_RATIO
+	var outline := OUTLINE_WIDTH * unit
+	if grabbed:
+		_draw_tube(curve, width, tip_width, outline + GLOW_WIDTH * unit, GLOW_COLOR)
+	_draw_tube(curve, width, tip_width, outline, OUTLINE_COLOR)
+	var skin := SKIN_COLOR
+	if _states[finger] == HandTypes.FingerState.HALF:
+		skin = SKIN_COLOR.lerp(HALF_COLOR, HALF_TINT)
+	_draw_tube(curve, width, tip_width, 0.0, skin)
+	for fraction in CREASE_FRACTIONS:
+		_draw_crease(curve, fraction, lerpf(width, tip_width, fraction), outline / 2.0)
+	var nail_alpha := clampf(1.0 - curl / NAIL_HIDDEN_CURL, 0.0, 1.0)
+	if nail_alpha > 0.0:
+		_draw_nail(curve, tip_width, nail_alpha, outline / 2.0)
+
+
+## 太さが付け根の width から指先の tip_width へ変わる管を、円を並べて描く。extra は太らせる量。
+func _draw_tube(
+	points: PackedVector2Array, width: float, tip_width: float, extra: float, color: Color
+) -> void:
+	var last := points.size() - 1
+	for s in points.size():
+		var radius := lerpf(width, tip_width, float(s) / last) / 2.0 + extra
+		draw_circle(points[s], radius, color, true, -1.0, true)
+
+
+func _draw_crease(
+	points: PackedVector2Array, fraction: float, width: float, thickness: float
+) -> void:
+	var last := points.size() - 1
+	var index := clampi(roundi(fraction * last), 1, last - 1)
+	var along := (points[index + 1] - points[index - 1]).normalized()
+	var half := along.orthogonal() * width * CREASE_LENGTH / 2.0
+	draw_line(points[index] - half, points[index] + half, CREASE_COLOR, thickness, true)
+
+
+func _draw_nail(
+	points: PackedVector2Array, tip_width: float, alpha: float, thickness: float
+) -> void:
+	var last := points.size() - 1
+	var along := (points[last] - points[last - 1]).normalized()
+	var center := points[last] - along * tip_width * NAIL_INSET
+	var radii := NAIL_SIZE * tip_width
+	var outline := PackedVector2Array()
+	for s in NAIL_SEGMENTS:
+		var angle := TAU * s / NAIL_SEGMENTS
+		var local := Vector2(cos(angle) * radii.x, sin(angle) * radii.y)
+		outline.append(center + local.rotated(along.angle() + PI / 2.0))
+	var nail := NAIL_COLOR
+	nail.a = alpha
+	draw_colored_polygon(outline, nail)
+	outline.append(outline[0])
+	var edge := CREASE_COLOR
+	edge.a = alpha
+	draw_polyline(outline, edge, thickness, true)
+
+
+func _draw_mosaic(unit: float) -> void:
+	var cell := MOSAIC_CELL * unit
+	var center := MOSAIC_CENTER * unit
+	var reach := MOSAIC_REACH * unit
 	var cells := ceili(reach / cell)
 	for x in range(-cells, cells):
 		for y in range(-cells, cells):
-			var corner := Vector2(x, y) * cell
-			if (corner + Vector2.ONE * cell / 2.0).length() > reach:
+			var corner := center + Vector2(x, y) * cell
+			if (corner + Vector2.ONE * cell / 2.0 - center).length() > reach:
 				continue
 			var color_index := posmod(x * MOSAIC_HASH.x + y * MOSAIC_HASH.y, MOSAIC_COLORS.size())
 			draw_rect(Rect2(corner, Vector2.ONE * cell), MOSAIC_COLORS[color_index])
 
 
+func _spawn_sparks(at: Vector2, unit: float) -> void:
+	for i in SPARK_COUNT:
+		var spark := Spark.new()
+		spark.position = at
+		var angle := TAU * (i + _rng.randf()) / SPARK_COUNT
+		spark.velocity = (
+			Vector2.RIGHT.rotated(angle) * SPARK_SPEED * unit * _rng.randf_range(0.6, 1.0)
+		)
+		spark.life = SPARK_LIFE
+		_sparks.append(spark)
+
+
+func _update_sparks(delta: float) -> void:
+	for spark in _sparks:
+		spark.position += spark.velocity * delta
+		spark.life -= delta
+	_sparks.assign(_sparks.filter(func(spark: Spark) -> bool: return spark.life > 0.0))
+
+
+func _draw_sparks(unit: float) -> void:
+	for spark in _sparks:
+		var reach := SPARK_SIZE * unit * spark.life / SPARK_LIFE
+		var along := spark.velocity.normalized() * reach
+		var across := along.orthogonal()
+		draw_line(spark.position - along, spark.position + along, SPARK_COLOR, reach / 2.0, true)
+		draw_line(spark.position - across, spark.position + across, SPARK_COLOR, reach / 2.0, true)
+
+
 func _gui_input(event: InputEvent) -> void:
 	if not interactive or _model == null:
-		_dragging = NO_FINGER
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_dragging = _finger_at(event.position) if event.pressed else NO_FINGER
-		accept_event()
-	elif event is InputEventMouseMotion and _dragging != NO_FINGER:
-		var local_motion: Vector2 = event.relative.rotated(-_wrist_radians())
-		var toward_tip := local_motion.dot(_finger_direction(_dragging))
-		finger_dragged.emit(_dragging as HandTypes.Finger, -toward_tip / _finger_length(_dragging))
-		accept_event()
+	if event is InputEventMouseButton:
+		if (
+			event.device == InputEvent.DEVICE_ID_EMULATION
+			or event.button_index != MOUSE_BUTTON_LEFT
+		):
+			return
+		_press(MOUSE_POINTER, event.position, event.pressed)
+	elif event is InputEventMouseMotion:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
+		_move(MOUSE_POINTER, event.relative)
+	elif event is InputEventScreenTouch:
+		_press(event.index, event.position, event.pressed)
+	elif event is InputEventScreenDrag:
+		_move(event.index, event.relative)
+	else:
+		return
+	accept_event()
 
 
-func _finger_at(position: Vector2) -> int:
-	var radius := _palm_radius()
-	var local := (position - size / 2.0).rotated(-_wrist_radians())
+func _press(pointer: int, at: Vector2, pressed: bool) -> void:
+	if not pressed:
+		_grabs.erase(pointer)
+		return
+	var finger := _finger_at(at)
+	if finger != NO_FINGER:
+		_grabs[pointer] = finger
+
+
+## 指の向きに沿う動きを曲がり具合へ、直交する動きを向きへ変える(指先がポインタに付いてくる)。
+func _move(pointer: int, relative: Vector2) -> void:
+	if not _grabs.has(pointer):
+		return
+	var finger: int = _grabs[pointer]
+	var unit := _unit()
+	var motion := _hand_transform().affine_inverse().basis_xform(relative)
+	var direction := _direction(finger)
+	var length: float = FINGER_LENGTHS[finger] * unit
+	var curl_amount := -motion.dot(direction) / (length * (1.0 - CURLED_LENGTH_RATIO))
+	var radius := maxf(_visible_length(finger, unit), length * MIN_SWING_RADIUS_RATIO)
+	var swing_degrees := rad_to_deg(motion.dot(direction.rotated(PI / 2.0)) / radius)
+	finger_moved.emit(finger as HandTypes.Finger, curl_amount, swing_degrees)
+
+
+func _finger_at(at: Vector2) -> int:
+	var unit := _unit()
+	var local := _hand_transform().affine_inverse() * at
 	var nearest := NO_FINGER
-	var nearest_distance := radius * FINGER_WIDTH_RATIO * GRAB_WIDTH_RATIO
-	for i in _model.curls.size():
-		var base := _finger_direction(i) * radius * FINGER_BASE_RATIO
-		var tip := base + _finger_direction(i) * _finger_length(i)
-		var distance := local.distance_to(Geometry2D.get_closest_point_to_segment(local, base, tip))
-		if distance < nearest_distance:
+	var nearest_distance := INF
+	for i in HandTypes.Finger.size():
+		var base: Vector2 = FINGER_BASES[i] * unit
+		var reach: Vector2 = base + _direction(i) * FINGER_LENGTHS[i] * unit
+		var closest := Geometry2D.get_closest_point_to_segment(local, base, reach)
+		var distance := local.distance_to(closest)
+		if distance < FINGER_WIDTHS[i] * unit * GRAB_WIDTH_RATIO and distance < nearest_distance:
 			nearest_distance = distance
 			nearest = i
 	return nearest
 
 
-func _palm_radius() -> float:
-	return minf(size.x, size.y) * PALM_RADIUS_RATIO
+func _hand_transform() -> Transform2D:
+	var unit := _unit()
+	var turn := PI if facing_down else 0.0
+	var view := Transform2D(turn, size / 2.0)
+	var hand := Transform2D(
+		pose_tilt, Vector2.ONE * pose_scale, 0.0, (PALM_CENTER + pose_offset) * unit
+	)
+	return view * hand
 
 
-func _finger_length(finger: int) -> float:
-	return _palm_radius() * FINGER_LENGTH_RATIOS[finger]
+func _unit() -> float:
+	return minf(size.x, size.y) * UNIT_RATIO
 
 
-func _finger_direction(finger: int) -> Vector2:
-	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger]))
+func _direction(finger: int) -> Vector2:
+	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger] + _model.swings[finger]))
 
 
-func _wrist_radians() -> float:
-	return deg_to_rad(_model.wrist_rotation_degrees)
+func _visible_length(finger: int, unit: float) -> float:
+	var curl := _model.curls[finger]
+	return FINGER_LENGTHS[finger] * unit * lerpf(1.0, CURLED_LENGTH_RATIO, curl)

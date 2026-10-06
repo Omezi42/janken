@@ -1,13 +1,15 @@
 class_name MatchRecord
 extends RefCounted
-## 1試合を再現するための記録(Architecture 4.1節)。seed と、tick ごとに指へ加えた曲がり具合のステップ数を持つ。
+## 1試合を再現するための記録(Architecture 4.1節)。seed と、tick ごとに指へ加えた曲がり具合・向きのステップ数を持つ。
 ## to_text() / from_text() でクリップボードに載せられる1行の文字列と相互に変換する。
 
 ## 記録の形式が変わったら上げる(古い文字列は読み込みを拒む)。
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
 const TEXT_PREFIX := "JK%d." % FORMAT_VERSION
 ## 曲がり具合 1.0 あたりのステップ数。ドラッグ量はこの単位へ丸めて記録・適用する。
 const STEPS_PER_CURL := 10000
+## 向き 1度あたりのステップ数。
+const STEPS_PER_DEGREE := 100
 ## 展開後の大きさの上限(壊れた文字列で大きなメモリを確保しないため)。
 const MAX_DECOMPRESSED_BYTES := 1 << 22
 

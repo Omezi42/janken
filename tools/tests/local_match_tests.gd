@@ -109,6 +109,12 @@ func _test_drag_is_applied_on_tick(assert_true: Callable) -> void:
 	game.drag(0, HandTypes.Finger.RING, tiny)
 	game.tick()
 	assert_true.call(game.record.size() == recorded + 1, "1ステップ未満の端数は次の tick へ持ち越す")
+	var swing_before := game.hands[0].swings[HandTypes.Finger.MIDDLE]
+	var degrees := 5.0 if swing_before < 0.0 else -5.0
+	game.swing(0, HandTypes.Finger.MIDDLE, degrees)
+	game.tick()
+	var swung := game.hands[0].swings[HandTypes.Finger.MIDDLE] - swing_before
+	assert_true.call(is_equal_approx(swung, degrees), "向きも tick の頭で適用する (%f)" % swung)
 
 
 func _test_hands_called(assert_true: Callable) -> void:

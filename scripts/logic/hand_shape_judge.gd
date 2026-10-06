@@ -46,14 +46,14 @@ func hand_name(curls: PackedFloat64Array) -> String:
 func states_of(curls: PackedFloat64Array) -> Array:
 	var states := []
 	for curl in curls:
-		states.append(_state_of(curl))
+		states.append(state_of(_config, curl))
 	return states
 
 
-func _state_of(curl: float) -> HandTypes.FingerState:
-	if curl < _config.extended_below:
+static func state_of(config: HandConfig, curl: float) -> HandTypes.FingerState:
+	if curl < config.extended_below:
 		return _EXTENDED
-	if curl > _config.curled_above:
+	if curl > config.curled_above:
 		return _CURLED
 	return _HALF
 

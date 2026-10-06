@@ -3,6 +3,9 @@ extends RefCounted
 
 const SEED := 7
 const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
+## ボットは向きを動かさないため、向きの記録を確かめる揺らし方(tick ごとの角度と速さ)。
+const WIGGLE_DEGREES := 3.0
+const WIGGLE_SPEED := 0.1
 
 var _hand_config: HandConfig = load("res://data/hand_config.tres")
 var _match_config: MatchConfig = load("res://data/match_config.tres")
@@ -27,11 +30,14 @@ func run(assert_true: Callable) -> void:
 	assert_true.call(replayed["names"] == original["names"], "リプレイは全ラウンドの手の名前が一致する")
 	assert_true.call(replayed["wins"] == original["wins"], "リプレイは勝利数が一致する")
 	assert_true.call(replayed["curls"] == original["curls"], "リプレイは最後の曲がり具合がビット単位で一致する")
+	assert_true.call(replayed["swings"] == original["swings"], "リプレイは最後の向きがビット単位で一致する")
 	assert_true.call(replayed["record"].to_text() == text, "リプレイを記録し直すと同じ文字列になる")
 
 	assert_true.call(MatchRecord.from_text("") == null, "空文字は読まない")
-	assert_true.call(MatchRecord.from_text("JK1.!!!!") == null, "壊れた文字列は読まない")
-	assert_true.call(MatchRecord.from_text("JK0." + text.substr(4)) == null, "版の違う文字列は読まない")
+	assert_true.call(MatchRecord.from_text(MatchRecord.TEXT_PREFIX + "!!!!") == null, "壊れた文字列は読まない")
+	var old_prefix := "JK%d." % (MatchRecord.FORMAT_VERSION - 1)
+	var old_text := old_prefix + text.substr(MatchRecord.TEXT_PREFIX.length())
+	assert_true.call(MatchRecord.from_text(old_text) == null, "版の違う文字列は読まない")
 	assert_true.call(MatchRecord.from_text(" %s\n" % text) != null, "前後の空白・改行は無視する")
 
 
@@ -55,6 +61,10 @@ func _play_bots(match_seed: int) -> Dictionary:
 	while game.phase != LocalMatch.Phase.OVER and game.tick_count < MAX_MATCH_TICKS:
 		for bot in bots:
 			bot.think()
+		var finger := game.tick_count % HandTypes.Finger.size()
+		game.swing(
+			0, finger as HandTypes.Finger, sin(game.tick_count * WIGGLE_SPEED) * WIGGLE_DEGREES
+		)
 		game.tick()
 	return _finish(log, game)
 
@@ -72,5 +82,6 @@ func _play_replay(record: MatchRecord) -> Dictionary:
 func _finish(log: Dictionary, game: LocalMatch) -> Dictionary:
 	log["wins"] = game.state.wins.duplicate()
 	log["curls"] = [game.hands[0].curls, game.hands[1].curls]
+	log["swings"] = [game.hands[0].swings, game.hands[1].swings]
 	log["record"] = game.record
 	return log

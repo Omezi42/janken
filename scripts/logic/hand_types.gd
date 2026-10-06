@@ -8,3 +8,5 @@ enum Shape { ROCK, SCISSORS, PAPER, FOUL, NAMED }
 enum Outcome { WIN, LOSE, DRAW }
 ## 名前付きの手の効果(GameDesign 2.5節)。
 enum EffectKind { CENSOR, OVERSLEEP, PISTOL }
+## 指の量(GameDesign 6.1節)。曲がり具合と向き。
+enum Axis { CURL, SWING }

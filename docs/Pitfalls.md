@@ -14,6 +14,9 @@
 - **GUIのクリックはヘッドレスでは届かない**(`push_input` しても `gui_get_hovered_control()` は none のまま)。押下の確認は非ヘッドレスで行う
 - **`--headless` では実際のピクセルが得られない。**スクリーンショットは通常起動で撮る。
   短い演出を撮るときは `Engine.time_scale` を0.2程度へ落とす(保存のコストで撮り逃すため)
+- **動きの確認は録画する。**`godot --path . --resolution 720x1280 --write-movie <出力>.avi --fixed-fps 60 --script <撮影用スクリプト>` で
+  基準解像度のまま全フレームを書き出し、ffmpeg で mp4 にする(ウィンドウは画面に収まるよう縮むが録画は縮まない)。
+  操作は撮影用スクリプトから `root.push_input(イベント, true)` で真似られる(座標は基準解像度)
 - **エクスポート済みpckに対してもテストを回す**
   (`godot --headless --main-pack build/web/index.pck --script res://tools/tests/run_tests.gd`)。
   `.tres` が `.tres.remap` になることによる差はこれでしか出ない
@@ -38,6 +41,8 @@
 - **シグナルの引数の数と受け手の引数の数がずれていても `connect()` は通る。**emit のたびにエラーが出て受け手が呼ばれないだけ
 - **static だけのクラスに `reload()` など `Script` の組み込みメソッドと同名の関数を作らない。**`GDScript.reload()` が呼ばれ static var が初期化される
 - **`var x := ProjectSettings.get_setting(...)` は Variant 推論の警告でコンパイルが落ちる。**`var x: Variant = ...` と明示する
+- **型の無い const 配列の要素を使った式を `:=` で受けると「Cannot infer the type」でコンパイルが落ちる**(`var p := base + dir * LENGTHS[i]`)。
+  `var p: Vector2 = ...` と型を書く。UIのスクリプトはテストが読まないので、起動スモークでしか出ない
 - **`class_name` を持つ2つのスクリプトが、互いの const を const から参照してはいけない。**読み込みが循環して起動したまま固まる
 
 ### Godotの挙動
