@@ -1,11 +1,11 @@
 class_name HandView
 extends Control
-## HandModel をマンガ風のゴムホースの手で描き、interactive ならなぞりを finger_reached で知らせる
+## HandModel をマンガ風のゴムホースの手で描き、interactive なら弾いた指を finger_reached で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
-## なぞり: 伸びきった指先のx座標の中点で縦の帯に分けて指を選び、ポインタの高さへ指先の高さを合わせる曲がり具合を知らせる。
+## 弾く: 伸びきった指先のx座標の中点で縦の帯に分け、押した帯の指を離すまで動かす。上へ弾くと伸びきり、下へ弾くと曲がりきり。
 
-## curl はポインタの高さに指先が来る曲がり具合(0.0〜1.0)。
+## curl は伸びきり(MIN_CURL)か曲がりきり(MAX_CURL)。
 signal finger_reached(finger: HandTypes.Finger, curl: float)
 
 
@@ -28,7 +28,7 @@ const SLEEVE_WIDTH := 1.75
 const SLEEVE_STRIPE := Vector2(0.12, 0.14)
 const OUTLINE_WIDTH := 0.06
 ## 指の付け根(手のひらの下に隠れる位置)・向き(度。上が0で時計回り)・伸びきりの長さ・太さ。親指から小指の順。
-## 指先の間を広げ、なぞりの帯の幅をスマホで指先1つ分以上にする(GameDesign 6.1節)。
+## 指先の間を広げ、指を選ぶ帯の幅をスマホで指先1つ分以上にする(GameDesign 6.1節)。
 const FINGER_BASES := [
 	Vector2(-0.85, 0.15),
 	Vector2(-0.72, -0.6),
@@ -44,8 +44,8 @@ const TIP_WIDTH_RATIO := 0.85
 ## 曲がりきった指の見える長さ(伸びきりに対する比)と、太る割合。
 const CURLED_LENGTH_RATIO := 0.3
 const CURLED_FATTEN := 0.15
-## 速くなぞったとき、前回の位置から今の位置までを区切る間隔(帯を飛ばさないように)。
-const SWEEP_SPACING := 0.1
+## 弾いたとみなす上下の距離(GameDesign 6.1節。基準解像度のピクセル)。
+const FLICK_DISTANCE := 32.0
 ## 触っている指がポインタの方へ傾く角度の上限(度)・追いつく速さ・付け根から測る距離の下限(伸びきりの長さに対する比)。
 const LEAN_MAX := 12.0
 const LEAN_SPEED := 18.0
@@ -116,6 +116,9 @@ const NO_FINGER := -1
 const MOUSE_POINTER := -1
 const NO_POINTER := -2
 const NO_STATE := -1
+const NO_FLICK := 0
+const FLICK_UP := -1
+const FLICK_DOWN := 1
 
 var interactive := false
 ## 自主規制(GameDesign 2.5節)で手をモザイクで覆う。
@@ -129,11 +132,15 @@ var pose_scale := 1.0
 var pose_tilt := 0.0
 var _model: HandModel
 var _config: HandConfig
-## なぞっているポインタ(マウスは MOUSE_POINTER、タッチは番号)。同時に1つだけ。
+## 押しているポインタ(マウスは MOUSE_POINTER、タッチは番号)。同時に1つだけ。
 var _pointer := NO_POINTER
-## なぞっているポインタの位置(演出を除いた手のローカル座標)と、その帯の指。
+## 押しているポインタの位置(演出を除いた手のローカル座標)と、押した帯の指。
 var _pointer_local := Vector2.ZERO
 var _touched := NO_FINGER
+## 押してから(または前に弾いてから)の最も高い・低いポインタの y と、最後に弾いた向き。
+var _highest := 0.0
+var _lowest := 0.0
+var _last_flick := NO_FLICK
 ## 見た目だけの傾き(度)。
 var _leans := PackedFloat32Array()
 var _softs: Array[SoftFinger] = []
@@ -410,11 +417,11 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if event.device == InputEvent.DEVICE_ID_EMULATION:
 			return
-		_sweep(MOUSE_POINTER, event.position)
+		_drag(MOUSE_POINTER, event.position)
 	elif event is InputEventScreenTouch:
 		_press(event.index, event.position, event.pressed)
 	elif event is InputEventScreenDrag:
-		_sweep(event.index, event.position)
+		_drag(event.index, event.position)
 	else:
 		return
 	accept_event()
@@ -429,29 +436,39 @@ func _press(pointer: int, at: Vector2, pressed: bool) -> void:
 		return
 	_pointer = pointer
 	_pointer_local = _rest_transform().affine_inverse() * at
-	_reach_at(_pointer_local)
+	_touched = _finger_at(_pointer_local.x / _unit())
+	_start_flick()
 
 
-## 前回の位置から今の位置までを SWEEP_SPACING ごとに区切り、通った帯の指を順に知らせる。
-func _sweep(pointer: int, at: Vector2) -> void:
+## 最も高い点から下へ、最も低い点から上へ FLICK_DISTANCE 動いたら、その向きに弾いたとみなす。
+func _drag(pointer: int, at: Vector2) -> void:
 	if pointer != _pointer:
 		return
-	var to := _rest_transform().affine_inverse() * at
-	var count := maxi(ceili(_pointer_local.distance_to(to) / (SWEEP_SPACING * _unit())), 1)
-	for i in range(1, count + 1):
-		_reach_at(_pointer_local.lerp(to, float(i) / count))
-	_pointer_local = to
+	_pointer_local = _rest_transform().affine_inverse() * at
+	var y := _pointer_local.y
+	_highest = minf(_highest, y)
+	_lowest = maxf(_lowest, y)
+	if _last_flick != FLICK_DOWN and y - _highest >= FLICK_DISTANCE:
+		_flick(FLICK_DOWN, HandModel.MAX_CURL)
+	elif _last_flick != FLICK_UP and _lowest - y >= FLICK_DISTANCE:
+		_flick(FLICK_UP, HandModel.MIN_CURL)
 
 
-func _reach_at(local: Vector2) -> void:
-	var unit := _unit()
-	_touched = _finger_at(local.x / unit)
-	finger_reached.emit(_touched as HandTypes.Finger, _curl_at(_touched, local.y / unit))
+func _flick(direction: int, curl: float) -> void:
+	_last_flick = direction
+	_start_flick()
+	finger_reached.emit(_touched as HandTypes.Finger, curl)
+
+
+func _start_flick() -> void:
+	_highest = _pointer_local.y
+	_lowest = _pointer_local.y
 
 
 func _release() -> void:
 	_pointer = NO_POINTER
 	_touched = NO_FINGER
+	_last_flick = NO_FLICK
 
 
 ## x は手の大きさに対する比。伸びきった指先のx座標の中点で分けた帯のうち、x が入る帯の指。
@@ -464,13 +481,6 @@ func _finger_at(x: float) -> int:
 		if x < border:
 			return i
 	return last
-
-
-## y は手の大きさに対する比。指先の高さが y になる曲がり具合(範囲の外は端で止める)。
-func _curl_at(finger: int, y: float) -> float:
-	var extended := _rest_tip(finger, HandModel.MIN_CURL).y
-	var curled := _rest_tip(finger, HandModel.MAX_CURL).y
-	return clampf((y - extended) / (curled - extended), HandModel.MIN_CURL, HandModel.MAX_CURL)
 
 
 ## 傾いていない指の、曲がり具合 curl での指先の位置(手の大きさに対する比)。
@@ -495,7 +505,7 @@ func _update_leans(delta: float) -> void:
 		_leans[i] = lerpf(_leans[i], goal, follow)
 
 
-## 演出(弾み・突き出し)を除いた手の位置。入力の対応に使う(拍で弾んでも同じ高さなら同じ曲がり具合にするため)。
+## 演出(弾み・突き出し)を除いた手の位置。入力の対応に使う(拍で弾んでも同じ位置なら同じ帯にするため)。
 func _rest_transform() -> Transform2D:
 	var turn := PI if facing_down else 0.0
 	return Transform2D(turn, size / 2.0) * Transform2D(0.0, PALM_CENTER * _unit())
