@@ -1,9 +1,9 @@
 class_name HandView
 extends Control
-## HandModel をマンガ風のゴムホースの手で描き、interactive ならなぞって入った帯の指を finger_flipped で知らせる
+## HandModel をマンガ風のゴムホースの手で描き、interactive ならつかんで引いた指の反転を finger_flipped で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
-## 帯: 左の何も起きない帯 0、親指 1 … 小指 5、右の何も起きない帯 6。押した瞬間は何もせず、隣の帯へ入るたびに知らせる。
+## 引く: 押した帯の指をつかみ、押した位置から反対の状態の向き(下が曲がり)へ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻す。
 
 signal finger_flipped(finger: HandTypes.Finger)
 
@@ -43,8 +43,8 @@ const TIP_WIDTH_RATIO := 0.85
 ## 曲がりきった指の見える長さ(伸びきりに対する比)と、太る割合。
 const CURLED_LENGTH_RATIO := 0.3
 const CURLED_FATTEN := 0.15
-## 境目を越えたとみなす距離(GameDesign 6.1節。基準解像度のピクセル)。
-const BAND_MARGIN := 12.0
+## 反転の距離(GameDesign 6.1節。基準解像度のピクセル)。つかんだ指の見た目は、この2倍で伸びきりから曲がりきりまで動く。
+const FLIP_DISTANCE := 80.0
 ## 見た目の曲がり具合が状態へ追いつくばね(行き過ぎは約1割)。
 const CURL_STIFFNESS := 300.0
 const CURL_DAMPING := 20.0
@@ -113,9 +113,6 @@ const NO_FINGER := -1
 const MOUSE_POINTER := -1
 const NO_POINTER := -2
 const NO_STATE := -1
-const NO_BAND := -1
-## 親指の帯の番号(左の何も起きない帯の次)。
-const FIRST_FINGER_BAND := 1
 
 var interactive := false
 ## 自主規制(GameDesign 2.5節)で手をモザイクで覆う。
@@ -130,11 +127,14 @@ var pose_tilt := 0.0
 var _model: HandModel
 ## 押しているポインタ(マウスは MOUSE_POINTER、タッチは番号)。同時に1つだけ。
 var _pointer := NO_POINTER
-## 押しているポインタの位置(演出を除いた手のローカル座標)、いる帯と、その帯の指。
+## 押しているポインタの位置(演出を除いた手のローカル座標)と、つかんでいる指。
 var _pointer_local := Vector2.ZERO
-var _band := NO_BAND
 var _touched := NO_FINGER
-## 帯の境目のx座標(手の大きさに対する比)。境目 k は帯 k と帯 k + 1 の間。
+## つかんだときのポインタの y と指の状態、いま反転の距離を越えているか。
+var _grab_y := 0.0
+var _grab_curled := false
+var _past_flip := false
+## 帯の境目のx座標(手の大きさに対する比)。境目 k は指 k と指 k + 1 の帯の間。
 var _borders := PackedFloat32Array()
 ## 見た目だけの曲がり具合(0.0 伸びきり 〜 1.0 曲がりきり。ばねで行き過ぎる)と速さ。
 var _curls := PackedFloat32Array()
@@ -237,9 +237,13 @@ func _process(delta: float) -> void:
 	var unit := _unit()
 	_update_leans(step)
 	for i in HandTypes.Finger.size():
-		var pull := CURL_STIFFNESS * (_goal_curl(i) - _curls[i])
-		_curl_velocities[i] += (pull - CURL_DAMPING * _curl_velocities[i]) * step
-		_curls[i] += _curl_velocities[i] * step
+		if i == _touched:
+			_curls[i] = _grabbed_curl()
+			_curl_velocities[i] = 0.0
+		else:
+			var pull := CURL_STIFFNESS * (_goal_curl(i) - _curls[i])
+			_curl_velocities[i] += (pull - CURL_DAMPING * _curl_velocities[i]) * step
+			_curls[i] += _curl_velocities[i] * step
 		var base: Vector2 = FINGER_BASES[i] * unit
 		var tip := base + _direction(i) * _visible_length(i, unit)
 		var state: int = _model.states[i]
@@ -435,57 +439,53 @@ func _press(pointer: int, at: Vector2, pressed: bool) -> void:
 		return
 	_pointer = pointer
 	_pointer_local = _rest_transform().affine_inverse() * at
-	var x := _pointer_local.x / _unit()
-	_band = 0
-	while _band < _borders.size() and x >= _borders[_band]:
-		_band += 1
-	_touched = _finger_of(_band)
+	_touched = _finger_at(_pointer_local.x / _unit())
+	_grab_y = _pointer_local.y
+	_grab_curled = _model.settled_state(_touched) == HandTypes.FingerState.CURLED
+	_past_flip = false
 
 
-## 今の帯の境目を BAND_MARGIN 越えるたびに隣の帯へ1つ進む(帯を飛ばしても通った帯はすべて反転する)。
+## つかんだ指を反対の状態の向きへ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻すよう知らせる。
 func _drag(pointer: int, at: Vector2) -> void:
 	if pointer != _pointer:
 		return
 	_pointer_local = _rest_transform().affine_inverse() * at
-	var x := _pointer_local.x / _unit()
-	var margin := BAND_MARGIN / _unit()
-	while _band < _borders.size() and x > _borders[_band] + margin:
-		_enter_band(_band + 1)
-	while _band > 0 and x < _borders[_band - 1] - margin:
-		_enter_band(_band - 1)
-
-
-func _enter_band(band: int) -> void:
-	_band = band
-	_touched = _finger_of(band)
-	if _touched != NO_FINGER:
+	var past := _pull() > FLIP_DISTANCE
+	if past != _past_flip:
+		_past_flip = past
 		finger_flipped.emit(_touched as HandTypes.Finger)
 
 
 func _release() -> void:
 	_pointer = NO_POINTER
-	_band = NO_BAND
 	_touched = NO_FINGER
 
 
-## 帯の指。何も起きない帯なら NO_FINGER。
-func _finger_of(band: int) -> int:
-	var finger := band - FIRST_FINGER_BAND
-	if finger < 0 or finger >= HandTypes.Finger.size():
-		return NO_FINGER
+## つかんだ位置から、反対の状態の向き(伸びていれば下、曲がっていれば上)へ動いた距離。
+func _pull() -> float:
+	var down := _pointer_local.y - _grab_y
+	return -down if _grab_curled else down
+
+
+## つかんでいる指の見た目の曲がり具合(ポインタに付いて動く)。
+func _grabbed_curl() -> float:
+	var start := 1.0 if _grab_curled else 0.0
+	return clampf(start + (_pointer_local.y - _grab_y) / (FLIP_DISTANCE * 2.0), 0.0, 1.0)
+
+
+## x は手の大きさに対する比。x が入る帯の指(両端の帯は画面の端まで)。
+func _finger_at(x: float) -> int:
+	var finger := 0
+	while finger < _borders.size() and x >= _borders[finger]:
+		finger += 1
 	return finger
 
 
-## 伸びきった指先のx座標の中点で分け、親指・小指の帯は隣との間の半分だけ指先の外へ広げる(GameDesign 6.1節)。
+## 伸びきった指先のx座標の中点(GameDesign 6.1節)。
 func _band_borders() -> PackedFloat32Array:
-	var tips := PackedFloat32Array()
-	for i in HandTypes.Finger.size():
-		tips.append(_extended_tip(i).x)
-	var last := tips.size() - 1
-	var borders := PackedFloat32Array([tips[0] - (tips[1] - tips[0]) / 2.0])
-	for i in last:
-		borders.append((tips[i] + tips[i + 1]) / 2.0)
-	borders.append(tips[last] + (tips[last] - tips[last - 1]) / 2.0)
+	var borders := PackedFloat32Array()
+	for i in HandTypes.Finger.size() - 1:
+		borders.append((_extended_tip(i).x + _extended_tip(i + 1).x) / 2.0)
 	return borders
 
 
