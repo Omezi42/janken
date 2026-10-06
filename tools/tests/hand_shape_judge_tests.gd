@@ -1,78 +1,32 @@
 extends RefCounted
-## HandShapeJudge と初期値の .tres(GameDesign 2.1節・2.2節・2.4節)。
+## HandShapeJudge と名前の表(GameDesign 2.2節・2.4節)。
 
 const _FINGER_COUNT := 5
 const _PATTERN_COUNT := 32
-const _STRAIGHT := 0.0
-const _BENT := 1.0
-const _LINKAGE_PAIR_COUNT := 4
 
-var _config: HandConfig = load("res://data/hand_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
-var _judge := HandShapeJudge.new(_config, _names)
+var _judge := HandShapeJudge.new(_names)
 
 
 func run(assert_true: Callable) -> void:
-	_test_data(assert_true)
-	_test_all_crisp_patterns(assert_true)
-	_test_thresholds(assert_true)
-	_test_prefixed_names(assert_true)
-
-
-func _test_data(assert_true: Callable) -> void:
 	assert_true.call(_names.names.size() == _PATTERN_COUNT, "名前の表は32通り")
-	assert_true.call(_config.linkage_strengths.size() == _LINKAGE_PAIR_COUNT, "連動の強さは隣接4組分")
-
-
-func _test_all_crisp_patterns(assert_true: Callable) -> void:
 	var legal := {
 		"●●●●●": HandTypes.Shape.ROCK,
 		"●○○●●": HandTypes.Shape.SCISSORS,
 		"○○○○○": HandTypes.Shape.PAPER,
 	}
 	for bits in _PATTERN_COUNT:
-		var curls := PackedFloat64Array()
+		var states := []
 		for finger in _FINGER_COUNT:
-			curls.append(_BENT if bits & (1 << finger) else _STRAIGHT)
-		var key := HandNameTable.key_of(_judge.states_of(curls))
-		var shape := _judge.shape_of(curls)
-		var name := _judge.hand_name(curls)
+			var curled := bits & (1 << finger)
+			states.append(
+				HandTypes.FingerState.CURLED if curled else HandTypes.FingerState.EXTENDED
+			)
+		var key := HandNameTable.key_of(states)
+		var shape := HandShapeJudge.shape_of(states)
+		var name := _judge.hand_name(states)
 		var expected_shape: HandTypes.Shape = legal.get(key, HandTypes.Shape.NAMED)
 		assert_true.call(
 			shape == expected_shape and name == _names.names.get(key, "<none>"),
-			"中途半端な指が無い形: %s → %s" % [key, name]
+			"形と名前: %s → %s" % [key, name]
 		)
-		assert_true.call(_judge.foul_name(curls) == "", "中途半端な指が無ければ反則ではない: " + key)
-
-
-func _test_thresholds(assert_true: Callable) -> void:
-	var states := _judge.states_of(PackedFloat64Array([0.29, 0.3, 0.5, 0.7, 0.71]))
-	var expected := [
-		HandTypes.FingerState.EXTENDED,
-		HandTypes.FingerState.HALF,
-		HandTypes.FingerState.HALF,
-		HandTypes.FingerState.HALF,
-		HandTypes.FingerState.CURLED,
-	]
-	assert_true.call(states == expected, "しきい値: 0.3未満は伸び、0.7超は曲がり %s" % [states])
-
-
-func _test_prefixed_names(assert_true: Callable) -> void:
-	var cases := [
-		[[1.0, 1.0, 1.0, 1.0, 0.6], "ほぼグー"],
-		[[0.0, 0.0, 0.0, 0.0, 0.4], "ほぼパー"],
-		[[0.8, 0.2, 0.45, 0.9, 1.0], "ほぼチョキ"],
-		[[0.0, 0.0, 1.0, 1.0, 0.6], "ゆるいピストル"],
-		[[0.0, 0.0, 1.0, 1.0, 0.4], "ゆるいアイラブユー"],
-		[[0.5, 0.0, 1.0, 1.0, 1.0], "ゆるい指さし"],
-		[[0.49, 1.0, 1.0, 1.0, 1.0], "ゆるいグッド"],
-		[[0.5, 0.5, 0.5, 0.5, 0.5], "グニャグニャ"],
-		[[0.3, 0.7, 0.4, 0.6, 0.5], "グニャグニャ"],
-	]
-	for case in cases:
-		var name := _judge.foul_name(PackedFloat64Array(case[0]))
-		assert_true.call(name == case[1], "%s → %s(期待 %s)" % [case[0], name, case[1]])
-	assert_true.call(
-		_judge.shape_of(PackedFloat64Array([1.0, 1.0, 1.0, 1.0, 0.6])) == HandTypes.Shape.FOUL,
-		"中途半端な指が1本でもあれば反則"
-	)

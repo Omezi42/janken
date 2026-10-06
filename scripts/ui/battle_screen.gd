@@ -4,7 +4,6 @@ extends Control
 ## 進行は LocalMatch が持ち、この画面は実時間を固定 tick へ刻んで回し、シグナルを受けて表示と演出を変えるだけ。
 ## 開発用の起動引数(`-- --replay=<記録の文字列>` / `-- --bot-vs-bot`)は Architecture 6章。
 
-const HAND_CONFIG: HandConfig = preload("res://data/hand_config.tres")
 const MATCH_CONFIG: MatchConfig = preload("res://data/match_config.tres")
 const HAND_NAMES: HandNameTable = preload("res://data/hand_name_table.tres")
 const HAND_EFFECTS: HandEffectTable = preload("res://data/hand_effect_table.tres")
@@ -33,7 +32,6 @@ const MY_CALL_NAME := "あなた"
 const THEIR_CALL_NAME := "あいて"
 
 const TEXT_COLOR := Color.WHITE
-const FOUL_COLOR := Color("ff6b5b")
 const NAMED_COLOR := Color("ffd84a")
 const MY_SLEEVE_COLOR := Color("ff8a3d")
 const THEIR_SLEEVE_COLOR := Color("3d8bff")
@@ -98,7 +96,7 @@ var _retry_button: Button
 func _ready() -> void:
 	_seed_rng.randomize()
 	_fx_rng.randomize()
-	_match = LocalMatch.new(HAND_CONFIG, MATCH_CONFIG, HAND_NAMES, HAND_EFFECTS)
+	_match = LocalMatch.new(MATCH_CONFIG, HAND_NAMES, HAND_EFFECTS)
 	_build()
 	_setup_players(OS.get_cmdline_user_args())
 	_match.round_started.connect(_on_round_started)
@@ -166,7 +164,7 @@ func _build() -> void:
 	_their_view.facing_down = true
 	_their_view.mouse_filter = MOUSE_FILTER_IGNORE
 	_my_view = _add_hand_view(_match.hands[MY_PLAYER], MY_HAND_RECT, MY_SLEEVE_COLOR)
-	_my_view.finger_reached.connect(_on_my_finger_reached)
+	_my_view.finger_flipped.connect(_on_my_finger_flipped)
 	_their_effect_label = _add_label(THEIR_EFFECT_RECT, EFFECT_FONT_SIZE)
 	_their_name_label = _add_label(THEIR_NAME_RECT, NAME_FONT_SIZE)
 	_their_tape = CensorTape.new()
@@ -187,7 +185,7 @@ func _build() -> void:
 
 func _add_hand_view(model: HandModel, rect: Rect2, sleeve: Color) -> HandView:
 	var view := HandView.new()
-	view.bind(model, HAND_CONFIG)
+	view.bind(model)
 	view.sleeve_color = sleeve
 	_place(_stage, view, rect)
 	return view
@@ -249,8 +247,8 @@ func _start_match() -> void:
 		_match.start(_seed_rng.randi())
 
 
-func _on_my_finger_reached(finger: HandTypes.Finger, curl: float) -> void:
-	_match.reach(MY_PLAYER, finger, curl)
+func _on_my_finger_flipped(finger: HandTypes.Finger) -> void:
+	_match.flip(MY_PLAYER, finger)
 
 
 func _on_round_started() -> void:
@@ -308,12 +306,7 @@ func _on_match_finished(winner: int) -> void:
 
 
 func _stamp_name(label: StampLabel, hand_name: String, shape: HandTypes.Shape) -> void:
-	var color := TEXT_COLOR
-	if shape == HandTypes.Shape.FOUL:
-		color = FOUL_COLOR
-	elif shape == HandTypes.Shape.NAMED:
-		color = NAMED_COLOR
-	label.stamp(hand_name, color)
+	label.stamp(hand_name, NAMED_COLOR if shape == HandTypes.Shape.NAMED else TEXT_COLOR)
 
 
 func _show_effect(label: StampLabel, effect: HandEffect, target_name: String) -> void:

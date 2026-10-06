@@ -1,20 +1,16 @@
 class_name HandNameTable
 extends Resource
-## 名前付きの手と反則した手の名前(GameDesign 2.4節)。
+## 手の名前(GameDesign 2.4節)。
 ## キーは親・人・中・薬・小の順に、伸び=EXTENDED_MARK / 曲がり=CURLED_MARK を並べた文字列。
 
 const EXTENDED_MARK := "○"
 const CURLED_MARK := "●"
 
-## 32通りすべての名前。グー・チョキ・パーも含む(「ほぼ○○」に使う)。
+## 32通りすべての名前。グー・チョキ・パーも含む。
 @export var names: Dictionary[String, String] = {}
-@export var almost_prefix: String
-@export var loose_prefix: String
-## 5本とも中途半端なときの名前。
-@export var all_half_name: String
 
 
-## states は伸び・曲がりだけからなる指の状態(HandTypes.FingerState)。
+## states は指の状態(HandTypes.FingerState)。
 static func key_of(states: Array) -> String:
 	var key := ""
 	for state in states:

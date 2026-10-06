@@ -5,8 +5,9 @@ const SEED := 42
 ## 1試合の tick の上限(あいこが続いても終わることを確かめる)。
 const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
 const BOT_SETTLE_TICKS := LocalMatch.TICKS_PER_SECOND * 3
+## 名前を呼ぶ間も手を変え続ける間隔。
+const FLIP_INTERVAL_TICKS := 7
 
-var _hand_config: HandConfig = load("res://data/hand_config.tres")
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
 var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
@@ -16,7 +17,7 @@ func run(assert_true: Callable) -> void:
 	_test_call_segments(assert_true)
 	_test_bot_makes_shape(assert_true)
 	_test_full_match(assert_true)
-	_test_reach_is_applied_on_tick(assert_true)
+	_test_flip_is_applied_on_tick(assert_true)
 	_test_hands_called(assert_true)
 
 
@@ -35,25 +36,20 @@ func _test_call_segments(assert_true: Callable) -> void:
 
 
 func _new_match() -> LocalMatch:
-	return LocalMatch.new(_hand_config, _match_config, _names, _effects)
+	return LocalMatch.new(_match_config, _names, _effects)
 
 
 func _test_bot_makes_shape(assert_true: Callable) -> void:
-	var judge := HandShapeJudge.new(_hand_config, _names)
 	var game := _new_match()
 	var bot := HandBot.new(game, 1, SEED)
 	game.start(SEED)
 	var hand := game.hands[1]
-	# 掛け声の終わりで判定されないよう、ラウンド中の手だけを直接進める。
 	for i in BOT_SETTLE_TICKS:
 		bot.think()
 		game.tick()
-		if game.phase != LocalMatch.Phase.CALLING:
-			break
-	for i in BOT_SETTLE_TICKS:
-		hand.step(LocalMatch.TICK_SECONDS)
-	var shape := judge.shape_of(hand.curls)
-	assert_true.call(shape != HandTypes.Shape.FOUL, "ボットは時間があれば形を作れる %s" % [hand.curls])
+	assert_true.call(game.phase == LocalMatch.Phase.CALLING, "確かめる間は掛け声の途中")
+	var shape := HandShapeJudge.shape_of(hand.states)
+	assert_true.call(shape != HandTypes.Shape.NAMED, "ボットは時間があれば形を作れる %s" % [hand.states])
 
 
 func _test_full_match(assert_true: Callable) -> void:
@@ -88,48 +84,40 @@ func _test_full_match(assert_true: Callable) -> void:
 	assert_true.call(game.record.size() == 0, "もう一度で記録も新しくなる")
 
 
-func _test_reach_is_applied_on_tick(assert_true: Callable) -> void:
+func _test_flip_is_applied_on_tick(assert_true: Callable) -> void:
 	var game := _new_match()
 	game.start(SEED)
 	var hand := game.hands[0]
-	var before := hand.targets[HandTypes.Finger.INDEX]
-	var goal := 0.0 if before > 0.5 else 1.0
-	game.reach(0, HandTypes.Finger.INDEX, goal)
-	assert_true.call(hand.targets[HandTypes.Finger.INDEX] == before, "reach は tick まで適用しない")
+	var before: int = hand.states[HandTypes.Finger.INDEX]
+	game.flip(0, HandTypes.Finger.INDEX)
+	assert_true.call(hand.states[HandTypes.Finger.INDEX] == before, "flip は tick まで適用しない")
 	game.tick()
-	assert_true.call(hand.targets[HandTypes.Finger.INDEX] == goal, "tick の頭で目標を置く")
+	assert_true.call(hand.states[HandTypes.Finger.INDEX] != before, "tick の頭で反転する")
 	assert_true.call(
 		(
 			game.record.size() == 1
 			and game.record.ticks[0] == 0
-			and game.record.steps[0] == roundi(goal * MatchRecord.STEPS_PER_CURL)
+			and game.record.slots[0] == LocalMatch.slot_of(0, HandTypes.Finger.INDEX)
 		),
-		"適用した tick で目標を記録する"
+		"適用した tick で反転を記録する"
 	)
-	game.reach(0, HandTypes.Finger.RING, 0.2)
-	game.reach(0, HandTypes.Finger.RING, 0.3)
+	var ring: int = hand.states[HandTypes.Finger.RING]
+	game.flip(0, HandTypes.Finger.RING)
+	game.flip(0, HandTypes.Finger.RING)
 	game.tick()
-	assert_true.call(game.record.size() == 2, "同じ指が続いたら最後の値だけ記録する")
-	assert_true.call(is_equal_approx(hand.targets[HandTypes.Finger.RING], 0.3), "最後の値を目標にする")
-	game.reach(0, HandTypes.Finger.RING, 0.0)
-	game.reach(0, HandTypes.Finger.MIDDLE, 1.0)
-	game.reach(0, HandTypes.Finger.RING, 1.0)
-	game.tick()
-	assert_true.call(game.record.size() == 5, "間に別の指を挟んだら届いた順にすべて記録する")
-	assert_true.call(
-		hand.targets[HandTypes.Finger.RING] == HandModel.MAX_CURL, "届いた順に適用する(最後に触った指が目標どおり)"
-	)
+	assert_true.call(game.record.size() == 3, "同じ指が続いてもすべて記録する")
+	assert_true.call(hand.states[HandTypes.Finger.RING] == ring, "同じ tick に2回反転したら元に戻る")
 
 
 func _test_hands_called(assert_true: Callable) -> void:
-	var judge := HandShapeJudge.new(_hand_config, _names)
+	var judge := HandShapeJudge.new(_names)
 	var game := _new_match()
 	var calls := []
 	var called_names := []
 	game.hands_called.connect(
 		func(call: LocalMatch.RoundResult) -> void:
 			calls.append(call)
-			called_names.append(judge.hand_name(game.hands[1].curls))
+			called_names.append(judge.hand_name(game.hands[1].states))
 			assert_true.call(
 				game.phase == LocalMatch.Phase.CALLING and game.state.wins == [0, 0], "呼ぶだけで判定しない"
 			)
@@ -137,7 +125,8 @@ func _test_hands_called(assert_true: Callable) -> void:
 	game.start(SEED)
 	var call_ticks := roundi(_match_config.call_total_seconds() * LocalMatch.TICKS_PER_SECOND)
 	for i in call_ticks:
-		game.reach(1, HandTypes.Finger.INDEX, float(i) / call_ticks)
+		if i % FLIP_INTERVAL_TICKS == 0:
+			game.flip(1, HandTypes.Finger.INDEX)
 		game.tick()
 	assert_true.call(calls.size() == 1, "手の名前は1ラウンドに1回だけ呼ぶ (%d)" % calls.size())
 	if calls.is_empty():

@@ -1,80 +1,82 @@
 class_name HandModel
 extends RefCounted
-## 1つの手の状態(GameDesign 6章)。5本の指の曲がり具合・目標・速度。並びは親指から小指の順。
-## reach() で指の目標を置くと隣の指の目標へ連動が伝わり、step() で全部の指がばねで目標を追う(触っている指も同じ)。
+## 1つの手の状態(GameDesign 2.1節・6章)。5本の指それぞれが伸びか曲がり。並びは親指から小指の順。
+## flip() で指を反転する。寝坊した指(delay_ticks が正)は予約だけして、step() でその tick 数が経ってから反転する。
 
-const MIN_CURL := 0.0
-const MAX_CURL := 1.0
+const EXTENDED := HandTypes.FingerState.EXTENDED
+const CURLED := HandTypes.FingerState.CURLED
 
-## 指ごとの動く速さの倍率(寝坊。GameDesign 2.5節)。ばねの時間に掛ける。
-var speed_scales := PackedFloat64Array()
-var curls := PackedFloat64Array()
-var targets := PackedFloat64Array()
-var _velocities := PackedFloat64Array()
-## 隣接する指の連動の強さ。[親−人, 人−中, 中−薬, 薬−小] の順。負なら逆向きに動く。
-var _linkage: Array[float]
-var _stiffness: float
-var _damping: float
+## HandTypes.FingerState の並び。
+var states := []
+## 指ごとの反転の遅れ(tick。寝坊。GameDesign 2.5節)。
+var delay_ticks := PackedInt32Array()
+## 遅れて反転する予約(届いた順)。
+var _scheduled_fingers := PackedInt32Array()
+var _scheduled_ticks := PackedInt32Array()
 
 
-func _init(config: HandConfig) -> void:
-	_linkage = config.linkage_strengths
-	_stiffness = config.spring_stiffness
-	_damping = config.spring_damping
+func _init() -> void:
 	var finger_count := HandTypes.Finger.size()
-	curls.resize(finger_count)
-	targets.resize(finger_count)
-	_velocities.resize(finger_count)
-	speed_scales.resize(finger_count)
-	speed_scales.fill(1.0)
+	states.resize(finger_count)
+	states.fill(EXTENDED)
+	delay_ticks.resize(finger_count)
 
 
-## ラウンド開始時の初期配置(GameDesign 6.3節)。
+## ラウンド開始時の初期配置(GameDesign 6.3節)。各指を半々の確率で伸び・曲がりにする。
 func randomize_pose(rng: RandomNumberGenerator) -> void:
-	var pose := PackedFloat64Array()
+	var pose := []
 	for i in HandTypes.Finger.size():
-		pose.append(rng.randf_range(MIN_CURL, MAX_CURL))
+		pose.append(CURLED if rng.randi_range(0, 1) == 1 else EXTENDED)
 	set_pose(pose)
 
 
-func set_pose(pose: PackedFloat64Array) -> void:
-	curls = pose.duplicate()
-	targets = pose.duplicate()
-	_velocities.fill(0.0)
+func set_pose(pose: Array) -> void:
+	states = pose.duplicate()
+	_scheduled_fingers.clear()
+	_scheduled_ticks.clear()
 
 
-## 1本だけ曲がり具合を置き換える(ピストル。GameDesign 2.5節)。
-func set_curl(finger: HandTypes.Finger, curl: float) -> void:
-	curls[finger] = curl
-	targets[finger] = curl
-	_velocities[finger] = 0.0
+## 1本だけ状態を置き換える(ピストル。GameDesign 2.5節)。
+func set_state(finger: HandTypes.Finger, state: HandTypes.FingerState) -> void:
+	states[finger] = state
 
 
-## 指の目標を curl にし、変わった分を隣の指の目標へ掛け算で伝える(GameDesign 6.2節)。
-func reach(finger: HandTypes.Finger, curl: float) -> void:
-	var before := targets[finger]
-	targets[finger] = clampf(curl, MIN_CURL, MAX_CURL)
-	var change := targets[finger] - before
-	var factor := 1.0
-	for i in range(finger - 1, -1, -1):
-		factor *= _linkage[i]
-		_shift_target(i, change * factor)
-	factor = 1.0
-	for i in range(finger + 1, targets.size()):
-		factor *= _linkage[i - 1]
-		_shift_target(i, change * factor)
+func is_curled(finger: HandTypes.Finger) -> bool:
+	return states[finger] == CURLED
 
 
-func step(delta: float) -> void:
-	for i in curls.size():
-		var scaled := delta * speed_scales[i]
-		var pull := _stiffness * (targets[i] - curls[i])
-		_velocities[i] += (pull - _damping * _velocities[i]) * scaled
-		curls[i] += _velocities[i] * scaled
-		if curls[i] < MIN_CURL or curls[i] > MAX_CURL:
-			curls[i] = clampf(curls[i], MIN_CURL, MAX_CURL)
-			_velocities[i] = 0.0
+func flip(finger: HandTypes.Finger) -> void:
+	if delay_ticks[finger] <= 0:
+		_toggle(finger)
+		return
+	_scheduled_fingers.append(finger)
+	_scheduled_ticks.append(delay_ticks[finger])
 
 
-func _shift_target(finger: int, amount: float) -> void:
-	targets[finger] = clampf(targets[finger] + amount, MIN_CURL, MAX_CURL)
+## 1tick 進め、遅れが経った予約を反転する。
+func step() -> void:
+	var i := 0
+	while i < _scheduled_ticks.size():
+		_scheduled_ticks[i] -= 1
+		if _scheduled_ticks[i] <= 0:
+			_toggle(_scheduled_fingers[i])
+			_scheduled_fingers.remove_at(i)
+			_scheduled_ticks.remove_at(i)
+		else:
+			i += 1
+
+
+## 予約がすべて済んだ後の状態。
+func settled_state(finger: HandTypes.Finger) -> HandTypes.FingerState:
+	var pending := _scheduled_fingers.count(finger)
+	if pending % 2 == 0:
+		return states[finger]
+	return _flipped(states[finger])
+
+
+func _toggle(finger: int) -> void:
+	states[finger] = _flipped(states[finger])
+
+
+static func _flipped(state: HandTypes.FingerState) -> HandTypes.FingerState:
+	return EXTENDED if state == CURLED else CURLED

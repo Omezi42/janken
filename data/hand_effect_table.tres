@@ -61,4 +61,4 @@ effects = Dictionary[String, ExtResource("1_ue1ly")]({
 "●○○○○": SubResource("Resource_prw3e"),
 "●●○●●": SubResource("Resource_7pmod")
 })
-oversleep_speed_scale = 0.5
+oversleep_delay_seconds = 0.4

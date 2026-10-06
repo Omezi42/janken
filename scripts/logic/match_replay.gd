@@ -19,7 +19,7 @@ func start() -> void:
 
 func tick() -> void:
 	while _cursor < _record.size() and _record.ticks[_cursor] <= _match.tick_count:
-		_match.push_steps(_record.slots[_cursor], _record.steps[_cursor])
+		_match.push_flip(_record.slots[_cursor])
 		_cursor += 1
 	_match.tick()
 

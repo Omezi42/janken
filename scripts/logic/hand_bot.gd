@@ -1,18 +1,18 @@
 class_name HandBot
 extends RefCounted
-## 開発用の仮の相手。ラウンドごとにグー・チョキ・パーから1つ選び、人と同じ LocalMatch.reach() で
-## 目標から最も遠い指を、人が弾く程度の間隔で1本ずつ弾く(連動・ばねも受ける)。
+## 開発用の仮の相手。ラウンドごとにグー・チョキ・パーから1つ選び、人と同じ LocalMatch.flip() で
+## 目標と食い違う指を、人がなぞる程度の間隔で1本ずつ反転する。
 ## 乱数は試合と別に持つ(リプレイはボットを動かさず記録だけで再現するため)。
 
+const _E := HandTypes.FingerState.EXTENDED
+const _C := HandTypes.FingerState.CURLED
 const GOALS := [
-	[1.0, 1.0, 1.0, 1.0, 1.0],
-	[1.0, 0.0, 0.0, 1.0, 1.0],
-	[0.0, 0.0, 0.0, 0.0, 0.0],
+	[_C, _C, _C, _C, _C],
+	[_C, _E, _E, _C, _C],
+	[_E, _E, _E, _E, _E],
 ]
-## 1本弾いてから次の指を弾くまでの秒数(人が指を1本ずつ弾く速さの目安)。
+## 1本反転してから次の指を反転するまでの秒数(人がなぞって帯を1つ越える速さの目安)。
 const TOUCH_SECONDS := 0.15
-## 目標との差がこれ以下の指は触らない。
-const ARRIVED := 0.05
 
 var _match: LocalMatch
 var _player: int
@@ -36,17 +36,11 @@ func think() -> void:
 		_wait_ticks -= 1
 		return
 	var hand := _match.hands[_player]
-	var finger := -1
-	var farthest := ARRIVED
-	for i in _goal.size():
-		var gap := absf(_goal[i] - hand.targets[i])
-		if gap > farthest:
-			farthest = gap
-			finger = i
-	if finger < 0:
-		return
-	_match.reach(_player, finger as HandTypes.Finger, _goal[finger])
-	_wait_ticks = roundi(TOUCH_SECONDS * LocalMatch.TICKS_PER_SECOND)
+	for finger in _goal.size():
+		if hand.settled_state(finger) != _goal[finger]:
+			_match.flip(_player, finger as HandTypes.Finger)
+			_wait_ticks = roundi(TOUCH_SECONDS * LocalMatch.TICKS_PER_SECOND)
+			return
 
 
 func _on_round_started() -> void:

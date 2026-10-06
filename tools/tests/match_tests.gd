@@ -4,7 +4,6 @@ extends RefCounted
 const ROCK := HandTypes.Shape.ROCK
 const SCISSORS := HandTypes.Shape.SCISSORS
 const PAPER := HandTypes.Shape.PAPER
-const FOUL := HandTypes.Shape.FOUL
 const NAMED := HandTypes.Shape.NAMED
 const WIN := HandTypes.Outcome.WIN
 const LOSE := HandTypes.Outcome.LOSE
@@ -31,13 +30,8 @@ func _test_round_rules(assert_true: Callable) -> void:
 		[ROCK, ROCK, DRAW],
 		[SCISSORS, SCISSORS, DRAW],
 		[PAPER, PAPER, DRAW],
-		[FOUL, ROCK, LOSE],
-		[PAPER, FOUL, WIN],
-		[FOUL, FOUL, DRAW],
 		[NAMED, ROCK, LOSE],
 		[SCISSORS, NAMED, WIN],
-		[NAMED, FOUL, WIN],
-		[FOUL, NAMED, LOSE],
 		[NAMED, NAMED, DRAW],
 	]
 	for case in cases:

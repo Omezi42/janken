@@ -38,6 +38,3 @@ names = Dictionary[String, String]({
 "○○●○○": "中指だけ寝坊",
 "○●○○○": "人差し指だけ寝坊"
 })
-almost_prefix = "ほぼ"
-loose_prefix = "ゆるい"
-all_half_name = "グニャグニャ"

@@ -59,12 +59,12 @@ func update(base: Vector2, tip: Vector2, sway: float, delta: float) -> void:
 	_started = true
 
 
-## 付け根から指先までの曲線。shake は指先の横ずれ(震え)で、付け根からの位置に比例させて足す。
-func curve(shake: float) -> PackedVector2Array:
+## 付け根から指先までの曲線。
+func curve() -> PackedVector2Array:
 	var controls := PackedVector2Array([_base])
 	for i in FRACTIONS.size():
-		controls.append(_rest[i] + _side * (_offsets[i] + shake * FRACTIONS[i]))
-	controls.append(_tip + _side * shake)
+		controls.append(_rest[i] + _side * _offsets[i])
+	controls.append(_tip)
 	var points := PackedVector2Array()
 	var last := controls.size() - 1
 	for s in SAMPLES + 1:

@@ -14,7 +14,6 @@ const OUTCOME_LABELS := {
 	HandTypes.Outcome.DRAW: "あいこ",
 }
 
-var _hand_config: HandConfig = load("res://data/hand_config.tres")
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
 var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
@@ -65,7 +64,7 @@ func _play_replay(record: MatchRecord) -> void:
 
 
 func _new_match() -> LocalMatch:
-	var game := LocalMatch.new(_hand_config, _match_config, _names, _effects)
+	var game := LocalMatch.new(_match_config, _names, _effects)
 	game.round_judged.connect(_print_round)
 	return game
 
