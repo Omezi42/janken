@@ -3,7 +3,7 @@ extends Control
 ## HandModel をマンガ風のゴムホースの手で描き、interactive ならつかんで引いた指の反転を finger_flipped で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
-## 引く: 押した帯の指をつかみ、押した位置から反対の状態の向き(下が曲がり)へ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻す。
+## 引く: 押した位置に一番近い見えている指をつかみ、押した位置から反対の状態の向き(下が曲がり)へ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻す。
 
 signal finger_flipped(finger: HandTypes.Finger)
 
@@ -134,8 +134,6 @@ var _touched := NO_FINGER
 var _grab_y := 0.0
 var _grab_curled := false
 var _past_flip := false
-## 帯の境目のx座標(手の大きさに対する比)。境目 k は指 k と指 k + 1 の帯の間。
-var _borders := PackedFloat32Array()
 ## 見た目だけの曲がり具合(0.0 伸びきり 〜 1.0 曲がりきり。ばねで行き過ぎる)と速さ。
 var _curls := PackedFloat32Array()
 var _curl_velocities := PackedFloat32Array()
@@ -165,7 +163,6 @@ func bind(model: HandModel) -> void:
 	_leans.resize(HandTypes.Finger.size())
 	_curls.resize(HandTypes.Finger.size())
 	_curl_velocities.resize(HandTypes.Finger.size())
-	_borders = _band_borders()
 	_rng.randomize()
 
 
@@ -439,7 +436,7 @@ func _press(pointer: int, at: Vector2, pressed: bool) -> void:
 		return
 	_pointer = pointer
 	_pointer_local = _rest_transform().affine_inverse() * at
-	_touched = _finger_at(_pointer_local.x / _unit())
+	_touched = _finger_at(_pointer_local / _unit())
 	_grab_y = _pointer_local.y
 	_grab_curled = _model.settled_state(_touched) == HandTypes.FingerState.CURLED
 	_past_flip = false
@@ -473,27 +470,19 @@ func _grabbed_curl() -> float:
 	return clampf(start + (_pointer_local.y - _grab_y) / (FLIP_DISTANCE * 2.0), 0.0, 1.0)
 
 
-## x は手の大きさに対する比。x が入る帯の指(両端の帯は画面の端まで)。
-func _finger_at(x: float) -> int:
-	var finger := 0
-	while finger < _borders.size() and x >= _borders[finger]:
-		finger += 1
-	return finger
-
-
-## 伸びきった指先のx座標の中点(GameDesign 6.1節)。
-func _band_borders() -> PackedFloat32Array:
-	var borders := PackedFloat32Array()
-	for i in HandTypes.Finger.size() - 1:
-		borders.append((_extended_tip(i).x + _extended_tip(i + 1).x) / 2.0)
-	return borders
-
-
-## 傾いていない、伸びきった指の指先の位置(手の大きさに対する比)。
-func _extended_tip(finger: int) -> Vector2:
-	var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger]))
-	var base: Vector2 = FINGER_BASES[finger]
-	return base + direction * FINGER_LENGTHS[finger]
+## at は手の大きさに対する比。傾きを除いたいまの見た目の指(付け根から指先までの線分)が一番近い指(GameDesign 6.1節)。
+func _finger_at(at: Vector2) -> int:
+	var nearest := 0
+	var nearest_distance := INF
+	for i in HandTypes.Finger.size():
+		var base: Vector2 = FINGER_BASES[i]
+		var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[i]))
+		var tip := base + direction * _visible_length(i, 1.0)
+		var distance := at.distance_to(Geometry2D.get_closest_point_to_segment(at, base, tip))
+		if distance < nearest_distance:
+			nearest = i
+			nearest_distance = distance
+	return nearest
 
 
 func _goal_curl(finger: int) -> float:
