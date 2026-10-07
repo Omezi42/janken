@@ -98,7 +98,7 @@ const WOBBLE_COUNT := 3
 
 const SKIN_COLOR := Color("f7c59f")
 ## 中途半端な指の色(GameDesign 8.1節)。
-const HALF_SKIN_COLOR := Color("b9b4b0")
+const HALF_SKIN_COLOR := Color("f2857a")
 const CREASE_COLOR := Color("cf8a62")
 const OUTLINE_COLOR := Color("3b2416")
 const NAIL_COLOR := Color("ffe6dc")
