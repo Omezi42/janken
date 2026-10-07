@@ -98,7 +98,8 @@ const WOBBLE_COUNT := 3
 
 const SKIN_COLOR := Color("f7c59f")
 ## 中途半端な指の色(GameDesign 8.1節)。
-const HALF_SKIN_COLOR := Color("b9b4b0")
+const HALF_SKIN_COLOR := Color("f2857a")
+const HALF_CREASE_COLOR := Color("a8463c")
 const CREASE_COLOR := Color("cf8a62")
 const OUTLINE_COLOR := Color("3b2416")
 const NAIL_COLOR := Color("ffe6dc")
@@ -302,8 +303,10 @@ func _draw_finger(finger: int, unit: float, touched: bool) -> void:
 	_draw_tube(curve, width, tip_width, outline, OUTLINE_COLOR)
 	var half := _states[finger] == HandTypes.FingerState.HALF
 	_draw_tube(curve, width, tip_width, 0.0, HALF_SKIN_COLOR if half else SKIN_COLOR)
+	var crease_color := HALF_CREASE_COLOR if half else CREASE_COLOR
 	for fraction in CREASE_FRACTIONS:
-		_draw_crease(curve, fraction, lerpf(width, tip_width, fraction), outline / 2.0)
+		var crease_width := lerpf(width, tip_width, fraction)
+		_draw_crease(curve, fraction, crease_width, outline / 2.0, crease_color)
 	var nail_alpha := clampf(1.0 - curl / NAIL_HIDDEN_CURL, 0.0, 1.0)
 	if nail_alpha > 0.0:
 		_draw_nail(curve, tip_width, nail_alpha, outline / 2.0)
@@ -320,13 +323,13 @@ func _draw_tube(
 
 
 func _draw_crease(
-	points: PackedVector2Array, fraction: float, width: float, thickness: float
+	points: PackedVector2Array, fraction: float, width: float, thickness: float, color: Color
 ) -> void:
 	var last := points.size() - 1
 	var index := clampi(roundi(fraction * last), 1, last - 1)
 	var along := (points[index + 1] - points[index - 1]).normalized()
 	var half := along.orthogonal() * width * CREASE_LENGTH / 2.0
-	draw_line(points[index] - half, points[index] + half, CREASE_COLOR, thickness, true)
+	draw_line(points[index] - half, points[index] + half, color, thickness, true)
 
 
 func _draw_nail(
