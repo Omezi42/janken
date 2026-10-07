@@ -6,5 +6,5 @@ extends Resource
 ## SERIES: HandTypes.Series / FINGER_CURLED・FINGER_EXTENDED: HandTypes.Finger /
 ## FEWER_EXTENDED: 本数。ほかは使わない。
 @export var value: int
-## 表示の文(例: チョキ系に勝つ)。
+## 表示の文(例: 指2〜3本に勝つ)。
 @export var text: String

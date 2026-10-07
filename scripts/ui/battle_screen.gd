@@ -35,14 +35,11 @@ const THEIR_CALL_NAME := "あいて"
 const TEXT_COLOR := Color.WHITE
 const NAMED_COLOR := Color("ffd84a")
 const FOUL_COLOR := HandView.HALF_SKIN_COLOR
-## いまの手の名前と勝ち条件の区切り(GameDesign 5章)。
-const LIVE_SEPARATOR := "・"
 const MY_SLEEVE_COLOR := Color("ff8a3d")
 const THEIR_SLEEVE_COLOR := Color("3d8bff")
 const CALL_FONT_SIZE := 104
 const NAME_FONT_SIZE := 60
 const EFFECT_FONT_SIZE := 30
-const LIVE_FONT_SIZE := 28
 const RETRY_FONT_SIZE := 44
 const RETRY_COLOR := Color("ffd84a")
 const RETRY_HOVER_COLOR := Color("ffe680")
@@ -57,14 +54,15 @@ const SHAKE_SECONDS := 0.3
 const THEIR_HAND_RECT := Rect2(0.0, 0.02, 1.0, 0.44)
 const MY_HAND_RECT := Rect2(0.0, 0.54, 1.0, 0.44)
 const THEIR_STARS_RECT := Rect2(0.04, 0.008, 0.92, 0.035)
-const THEIR_LIVE_RECT := Rect2(0.0, 0.045, 1.0, 0.035)
 const MY_STARS_RECT := Rect2(0.04, 0.957, 0.92, 0.035)
-const MY_LIVE_RECT := Rect2(0.0, 0.918, 1.0, 0.035)
 const THEIR_EFFECT_RECT := Rect2(0.0, 0.392, 1.0, 0.035)
 const THEIR_NAME_RECT := Rect2(0.0, 0.425, 1.0, 0.05)
+## 勝ち条件の札は名前のハンコとほぼ同じ所(相手の札は掛け声に触れないよう少し上)。
+const THEIR_TAG_RECT := Rect2(0.0, 0.425, 1.0, 0.04)
 const CALL_RECT := Rect2(0.0, 0.468, 1.0, 0.07)
 const LAMPS_RECT := Rect2(0.3, 0.537, 0.4, 0.016)
 const MY_NAME_RECT := Rect2(0.0, 0.556, 1.0, 0.05)
+const MY_TAG_RECT := Rect2(0.0, 0.561, 1.0, 0.04)
 const MY_EFFECT_RECT := Rect2(0.0, 0.604, 1.0, 0.035)
 const RETRY_RECT := Rect2(0.28, 0.66, 0.44, 0.075)
 const FULL_RECT := Rect2(0.0, 0.0, 1.0, 1.0)
@@ -94,8 +92,9 @@ var _my_name_label: StampLabel
 var _their_name_label: StampLabel
 var _my_effect_label: StampLabel
 var _their_effect_label: StampLabel
-var _my_live_label: StampLabel
-var _their_live_label: StampLabel
+var _tags: Array[HandTag] = []
+## いまの掛け声の区間。
+var _call_segment := 0
 var _their_tape: CensorTape
 var _my_stars: WinStars
 var _their_stars: WinStars
@@ -123,8 +122,7 @@ func _process(delta: float) -> void:
 		_unprocessed_seconds -= LocalMatch.TICK_SECONDS
 		_tick()
 	_my_view.interactive = _is_human_playing() and _match.can_operate()
-	_update_live(_my_live_label, MY_PLAYER)
-	_update_live(_their_live_label, THEIR_PLAYER)
+	_update_tags()
 	_shake(delta)
 
 
@@ -176,8 +174,9 @@ func _build() -> void:
 	_their_view.mouse_filter = MOUSE_FILTER_IGNORE
 	_my_view = _add_hand_view(_match.hands[MY_PLAYER], MY_HAND_RECT, MY_SLEEVE_COLOR)
 	_my_view.finger_moved.connect(_on_my_finger_moved)
-	_their_live_label = _add_label(THEIR_LIVE_RECT, LIVE_FONT_SIZE)
-	_my_live_label = _add_label(MY_LIVE_RECT, LIVE_FONT_SIZE)
+	_tags.resize(LocalMatch.PLAYER_COUNT)
+	_tags[THEIR_PLAYER] = _add_tag(THEIR_TAG_RECT)
+	_tags[MY_PLAYER] = _add_tag(MY_TAG_RECT)
 	_their_effect_label = _add_label(THEIR_EFFECT_RECT, EFFECT_FONT_SIZE)
 	_their_name_label = _add_label(THEIR_NAME_RECT, NAME_FONT_SIZE)
 	_their_tape = CensorTape.new()
@@ -209,6 +208,13 @@ func _add_label(rect: Rect2, font_size: int) -> StampLabel:
 	_place(_stage, label, rect)
 	label.setup(font_size)
 	return label
+
+
+func _add_tag(rect: Rect2) -> HandTag:
+	var tag := HandTag.new()
+	tag.visible = false
+	_place(_stage, tag, rect)
+	return tag
 
 
 func _add_stars(rect: Rect2, caption: String) -> WinStars:
@@ -274,6 +280,7 @@ func _on_round_started() -> void:
 
 
 func _on_call_segment_changed(index: int) -> void:
+	_call_segment = index
 	var word := MATCH_CONFIG.call_words[index]
 	if word.is_empty():
 		_call_label.clear()
@@ -331,15 +338,40 @@ func _shape_color(shape: HandTypes.Shape) -> Color:
 	return TEXT_COLOR
 
 
-## 掛け声の間、いまの手の名前と勝ち条件を出す(GameDesign 5章)。モザイクの掛かった手は出さない。
-func _update_live(label: StampLabel, player: int) -> void:
-	if not _match.can_operate() or _match.effects.is_censored(player):
-		label.clear()
-		return
-	var curls := _match.hands[player].curls
-	var states := _match.judge.states_of(curls)
-	var line := _match.judge.hand_name(curls) + LIVE_SEPARATOR + _match.judge.condition_text(states)
-	label.put(line, _shape_color(HandShapeJudge.shape_of(states)))
+## 掛け声の間、手の指先のそばに勝ち条件の札を出す(GameDesign 5章)。名前を呼ぶ区間は名前のハンコに任せて隠す。
+func _update_tags() -> void:
+	var states := []
+	for hand in _match.hands:
+		states.append(_match.judge.states_of(hand.curls))
+	for player in LocalMatch.PLAYER_COUNT:
+		var tag := _tags[player]
+		if not _match.can_operate() or _is_hidden(player):
+			tag.clear()
+			continue
+		var mine: Array = states[player]
+		var theirs: Array = states[_other(player)]
+		if HandShapeJudge.shape_of(mine) == HandTypes.Shape.FOUL:
+			tag.put_foul()
+		else:
+			var hand_name := _match.judge.hand_name(_match.hands[player].curls)
+			tag.put(hand_name, _match.judge.condition_text(mine), _is_lit(player, mine, theirs))
+		tag.visible = _call_segment != MATCH_CONFIG.hand_call_segment
+
+
+## 反則でない手 mine の勝ち条件が当たっているか。相手が反則・モザイクに隠れているときは光らせない。
+func _is_lit(player: int, mine: Array, theirs: Array) -> bool:
+	if HandShapeJudge.shape_of(theirs) == HandTypes.Shape.FOUL or _is_hidden(_other(player)):
+		return false
+	return RoundRules.beats(mine, theirs, _match.judge)
+
+
+## この画面でモザイクに隠れている手か(モザイクは相手の画面でだけ掛かる。GameDesign 2.5節)。
+func _is_hidden(player: int) -> bool:
+	return player == THEIR_PLAYER and _match.effects.is_censored(THEIR_PLAYER)
+
+
+func _other(player: int) -> int:
+	return THEIR_PLAYER if player == MY_PLAYER else MY_PLAYER
 
 
 func _show_effect(label: StampLabel, effect: HandEffect, target_name: String) -> void:

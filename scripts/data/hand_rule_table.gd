@@ -11,7 +11,6 @@ extends Resource
 ## 勝ち条件を持つ手(本家を含む)。表に無い手は勝ち条件なし。
 @export var conditions: Dictionary[String, HandCondition] = {}
 @export var no_condition_text: String
-@export var foul_text: String
 
 
 ## states は伸び・曲がりだけからなる指の状態。勝ち条件が無ければ null。
