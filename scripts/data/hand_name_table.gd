@@ -8,14 +8,27 @@ const CURLED_MARK := "●"
 
 ## 32通りすべての名前。グー・チョキ・パーも含む。
 @export var names: Dictionary[String, String] = {}
+## 反則の名前。{name} は中途半端な指を寄せた手の名前に置き換える。
+@export var foul_original_format: String
+@export var foul_named_format: String
+## 5本とも中途半端な反則の名前。
+@export var all_half_name: String
 
 
-## states は指の状態(HandTypes.FingerState)。
+## states は伸び・曲がりだけからなる指の状態(HandTypes.FingerState)。
 static func key_of(states: Array) -> String:
 	var key := ""
 	for state in states:
 		key += CURLED_MARK if state == HandTypes.FingerState.CURLED else EXTENDED_MARK
 	return key
+
+
+static func states_of(key: String) -> Array:
+	var states := []
+	for mark in key:
+		var curled := mark == CURLED_MARK
+		states.append(HandTypes.FingerState.CURLED if curled else HandTypes.FingerState.EXTENDED)
+	return states
 
 
 func name_of(states: Array) -> String:

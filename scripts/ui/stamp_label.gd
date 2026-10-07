@@ -1,6 +1,6 @@
 class_name StampLabel
 extends Label
-## 弾んで出る文字(pop)と、ハンコのように押される文字(stamp)(GameDesign 8.2節・8.3節)。
+## 弾んで出る文字(pop)と、ハンコのように押される文字(stamp)(GameDesign 8.2節・8.3節)。put は動かさずに出す。
 ## 幅に収まらない文字は小さくする。
 
 const POP_SCALE := 1.6
@@ -32,6 +32,12 @@ func setup(font_size: int) -> void:
 func clear() -> void:
 	_stop()
 	text = ""
+
+
+## 動かさずに出す(同じ文字なら何もしない)。
+func put(new_text: String, color: Color) -> void:
+	if new_text != text:
+		_show(new_text, color)
 
 
 func pop(new_text: String, color: Color) -> void:

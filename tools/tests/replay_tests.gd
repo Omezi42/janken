@@ -7,6 +7,7 @@ const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
 var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
+var _rules: HandRuleTable = load("res://data/hand_rule_table.tres")
 
 
 func run(assert_true: Callable) -> void:
@@ -25,7 +26,7 @@ func run(assert_true: Callable) -> void:
 	var replayed := _play_replay(parsed)
 	assert_true.call(replayed["names"] == original["names"], "リプレイは全ラウンドの手の名前が一致する")
 	assert_true.call(replayed["wins"] == original["wins"], "リプレイは勝利数が一致する")
-	assert_true.call(replayed["states"] == original["states"], "リプレイは最後の指の状態が一致する")
+	assert_true.call(replayed["curls"] == original["curls"], "リプレイは最後の指の曲がり具合が一致する")
 	assert_true.call(replayed["record"].to_text() == text, "リプレイを記録し直すと同じ文字列になる")
 
 	assert_true.call(MatchRecord.from_text("") == null, "空文字は読まない")
@@ -37,7 +38,7 @@ func run(assert_true: Callable) -> void:
 
 
 func _new_match(log: Dictionary) -> LocalMatch:
-	var game := LocalMatch.new(_match_config, _names, _effects)
+	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
 	log["names"] = []
 	game.round_judged.connect(
 		func(result: LocalMatch.RoundResult) -> void:
@@ -72,6 +73,6 @@ func _play_replay(record: MatchRecord) -> Dictionary:
 
 func _finish(log: Dictionary, game: LocalMatch) -> Dictionary:
 	log["wins"] = game.state.wins.duplicate()
-	log["states"] = [game.hands[0].states.duplicate(), game.hands[1].states.duplicate()]
+	log["curls"] = [game.hands[0].curls.duplicate(), game.hands[1].curls.duplicate()]
 	log["record"] = game.record
 	return log

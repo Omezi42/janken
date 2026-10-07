@@ -2,7 +2,7 @@ class_name LocalMatch
 extends RefCounted
 ## オフラインの1試合(GameDesign 5章)。プレイヤーは 0(手前)と 1(奥)。
 ## 固定間隔の tick() だけで進む決定論的なシミュレーション。同じ seed と同じ入力からは必ず同じ試合になる。
-## 入力は flip() で溜め、次の tick() の頭で順に反転し record へ残す(Architecture 4.1節)。
+## 入力は move() で溜め、次の tick() の頭で順に指を動かし record へ残す(Architecture 4.1節)。
 
 signal round_started
 signal call_segment_changed(index: int)
@@ -20,6 +20,9 @@ const PLAYER_COUNT := 2
 
 class RoundResult:
 	var outcome: HandTypes.Outcome
+	## 指の状態(HandTypes.FingerState)。
+	var my_states: Array
+	var their_states: Array
 	var my_shape: HandTypes.Shape
 	var their_shape: HandTypes.Shape
 	var my_name: String
@@ -36,20 +39,26 @@ var record := MatchRecord.new()
 var effects := ActiveEffects.new()
 ## start() からの tick 数。記録の時刻に使う。
 var tick_count := 0
+var judge: HandShapeJudge
 var _match_config: MatchConfig
-var _judge: HandShapeJudge
 var _effect_table: HandEffectTable
 var _rng := RandomNumberGenerator.new()
 var _phase_ticks := 0
 var _segment := 0
-## まだ適用していない反転(届いた順)。slot はプレイヤー × 指。
+## まだ適用していない指の動き(届いた順)。slot はプレイヤー × 指。
 var _pending_slots := PackedByteArray()
+var _pending_curls := PackedByteArray()
 
 
-func _init(match_config: MatchConfig, names: HandNameTable, effect_table: HandEffectTable) -> void:
+func _init(
+	match_config: MatchConfig,
+	names: HandNameTable,
+	effect_table: HandEffectTable,
+	rule_table: HandRuleTable
+) -> void:
 	_match_config = match_config
 	_effect_table = effect_table
-	_judge = HandShapeJudge.new(names)
+	judge = HandShapeJudge.new(names, rule_table)
 	for player in PLAYER_COUNT:
 		hands.append(HandModel.new())
 	state = MatchState.new(match_config)
@@ -73,16 +82,17 @@ func can_operate() -> bool:
 	return phase == Phase.CALLING
 
 
-## 指を反転する。操作できない間は捨てる。
-func flip(player: int, finger: HandTypes.Finger) -> void:
+## 指を曲がり具合 curl(0〜HandModel.CURL_MAX)へ動かす。操作できない間は捨てる。
+func move(player: int, finger: HandTypes.Finger, curl: int) -> void:
 	if can_operate():
-		push_flip(slot_of(player, finger))
+		push_move(slot_of(player, finger), curl)
 
 
-## リプレイ用。記録された反転をそのまま次の tick() へ渡す。
-func push_flip(slot: int) -> void:
+## リプレイ用。記録された動きをそのまま次の tick() へ渡す。
+func push_move(slot: int, curl: int) -> void:
 	if slot >= 0 and slot < PLAYER_COUNT * HandTypes.Finger.size():
 		_pending_slots.append(slot)
+		_pending_curls.append(clampi(curl, 0, HandModel.CURL_MAX))
 
 
 func tick() -> void:
@@ -110,6 +120,7 @@ func _start_round() -> void:
 		hand.randomize_pose(_rng)
 	_apply_effects()
 	_pending_slots.clear()
+	_pending_curls.clear()
 	phase = Phase.CALLING
 	_phase_ticks = 0
 	round_started.emit()
@@ -125,17 +136,19 @@ func _apply_effects() -> void:
 			hand.delay_ticks[finger] = delay if sleepy else 0
 		if effects.is_shot(player):
 			var shot := _rng.randi_range(0, HandTypes.Finger.size() - 1)
-			hand.set_state(shot as HandTypes.Finger, HandTypes.FingerState.CURLED)
+			hand.set_curl(shot as HandTypes.Finger, HandModel.CURL_MAX)
 
 
 func _apply_pending() -> void:
 	var finger_count := HandTypes.Finger.size()
-	for slot in _pending_slots:
-		record.append(tick_count, slot)
+	for i in _pending_slots.size():
+		var slot := _pending_slots[i]
+		record.append(tick_count, slot, _pending_curls[i])
 		@warning_ignore("integer_division")
 		var player := slot / finger_count
-		hands[player].flip((slot % finger_count) as HandTypes.Finger)
+		hands[player].move((slot % finger_count) as HandTypes.Finger, _pending_curls[i])
 	_pending_slots.clear()
+	_pending_curls.clear()
 
 
 func _tick_call() -> void:
@@ -161,19 +174,19 @@ func _phase_seconds() -> float:
 
 
 func _name_hands() -> RoundResult:
-	var mine := hands[0].states
-	var theirs := hands[1].states
 	var result := RoundResult.new()
-	result.my_shape = HandShapeJudge.shape_of(mine)
-	result.their_shape = HandShapeJudge.shape_of(theirs)
-	result.my_name = _judge.hand_name(mine)
-	result.their_name = _judge.hand_name(theirs)
+	result.my_states = judge.states_of(hands[0].curls)
+	result.their_states = judge.states_of(hands[1].curls)
+	result.my_shape = HandShapeJudge.shape_of(result.my_states)
+	result.their_shape = HandShapeJudge.shape_of(result.their_states)
+	result.my_name = judge.hand_name(hands[0].curls)
+	result.their_name = judge.hand_name(hands[1].curls)
 	return result
 
 
 func _finish_round() -> void:
 	var result := _name_hands()
-	result.outcome = RoundRules.outcome(result.my_shape, result.their_shape)
+	result.outcome = RoundRules.outcome(result.my_states, result.their_states, judge)
 	state.record(result.outcome)
 	effects.end_round()
 	result.my_effect = _trigger_effect(0)
@@ -184,7 +197,7 @@ func _finish_round() -> void:
 
 
 func _trigger_effect(player: int) -> HandEffect:
-	var states := hands[player].states
+	var states := judge.states_of(hands[player].curls)
 	if HandShapeJudge.shape_of(states) != HandTypes.Shape.NAMED:
 		return null
 	var effect := _effect_table.effect_of(states)

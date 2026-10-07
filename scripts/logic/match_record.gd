@@ -1,10 +1,10 @@
 class_name MatchRecord
 extends RefCounted
-## 1試合を再現するための記録(Architecture 4.1節)。seed と、tick ごとに反転した指(slot)を持つ。
+## 1試合を再現するための記録(Architecture 4.1節)。seed と、tick ごとに動かした指(slot)とその曲がり具合を持つ。
 ## to_text() / from_text() でクリップボードに載せられる1行の文字列と相互に変換する。
 
 ## 記録の形式が変わったら上げる(古い文字列は読み込みを拒む)。
-const FORMAT_VERSION := 4
+const FORMAT_VERSION := 5
 const TEXT_PREFIX := "JK%d." % FORMAT_VERSION
 ## 展開後の大きさの上限(壊れた文字列で大きなメモリを確保しないため)。
 const MAX_DECOMPRESSED_BYTES := 1 << 22
@@ -12,11 +12,13 @@ const MAX_DECOMPRESSED_BYTES := 1 << 22
 var seed := 0
 var ticks := PackedInt32Array()
 var slots := PackedByteArray()
+var curls := PackedByteArray()
 
 
-func append(tick: int, slot: int) -> void:
+func append(tick: int, slot: int, curl: int) -> void:
 	ticks.append(tick)
 	slots.append(slot)
+	curls.append(curl)
 
 
 func size() -> int:
@@ -24,7 +26,7 @@ func size() -> int:
 
 
 func to_text() -> String:
-	var data := {"seed": seed, "ticks": ticks, "slots": slots}
+	var data := {"seed": seed, "ticks": ticks, "slots": slots, "curls": curls}
 	var bytes := var_to_bytes(data).compress(FileAccess.COMPRESSION_DEFLATE)
 	return TEXT_PREFIX + Marshalls.raw_to_base64(bytes)
 
@@ -47,6 +49,7 @@ static func from_text(text: String) -> MatchRecord:
 	record.seed = data["seed"]
 	record.ticks = data["ticks"]
 	record.slots = data["slots"]
+	record.curls = data["curls"]
 	return record
 
 
@@ -55,6 +58,7 @@ static func _is_valid(data: Variant) -> bool:
 		return false
 	if not (data.get("seed") is int and data.get("ticks") is PackedInt32Array):
 		return false
-	if not data.get("slots") is PackedByteArray:
+	if not (data.get("slots") is PackedByteArray and data.get("curls") is PackedByteArray):
 		return false
-	return data["slots"].size() == data["ticks"].size()
+	var count: int = data["ticks"].size()
+	return data["slots"].size() == count and data["curls"].size() == count

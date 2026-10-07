@@ -7,6 +7,7 @@ extends Control
 const MATCH_CONFIG: MatchConfig = preload("res://data/match_config.tres")
 const HAND_NAMES: HandNameTable = preload("res://data/hand_name_table.tres")
 const HAND_EFFECTS: HandEffectTable = preload("res://data/hand_effect_table.tres")
+const HAND_RULES: HandRuleTable = preload("res://data/hand_rule_table.tres")
 
 const OUTCOME_TEXTS := {
 	HandTypes.Outcome.WIN: "かち!",
@@ -33,11 +34,15 @@ const THEIR_CALL_NAME := "あいて"
 
 const TEXT_COLOR := Color.WHITE
 const NAMED_COLOR := Color("ffd84a")
+const FOUL_COLOR := HandView.HALF_SKIN_COLOR
+## いまの手の名前と勝ち条件の区切り(GameDesign 5章)。
+const LIVE_SEPARATOR := "・"
 const MY_SLEEVE_COLOR := Color("ff8a3d")
 const THEIR_SLEEVE_COLOR := Color("3d8bff")
 const CALL_FONT_SIZE := 104
 const NAME_FONT_SIZE := 60
 const EFFECT_FONT_SIZE := 30
+const LIVE_FONT_SIZE := 28
 const RETRY_FONT_SIZE := 44
 const RETRY_COLOR := Color("ffd84a")
 const RETRY_HOVER_COLOR := Color("ffe680")
@@ -52,7 +57,9 @@ const SHAKE_SECONDS := 0.3
 const THEIR_HAND_RECT := Rect2(0.0, 0.02, 1.0, 0.44)
 const MY_HAND_RECT := Rect2(0.0, 0.54, 1.0, 0.44)
 const THEIR_STARS_RECT := Rect2(0.04, 0.008, 0.92, 0.035)
+const THEIR_LIVE_RECT := Rect2(0.0, 0.045, 1.0, 0.035)
 const MY_STARS_RECT := Rect2(0.04, 0.957, 0.92, 0.035)
+const MY_LIVE_RECT := Rect2(0.0, 0.918, 1.0, 0.035)
 const THEIR_EFFECT_RECT := Rect2(0.0, 0.392, 1.0, 0.035)
 const THEIR_NAME_RECT := Rect2(0.0, 0.425, 1.0, 0.05)
 const CALL_RECT := Rect2(0.0, 0.468, 1.0, 0.07)
@@ -87,6 +94,8 @@ var _my_name_label: StampLabel
 var _their_name_label: StampLabel
 var _my_effect_label: StampLabel
 var _their_effect_label: StampLabel
+var _my_live_label: StampLabel
+var _their_live_label: StampLabel
 var _their_tape: CensorTape
 var _my_stars: WinStars
 var _their_stars: WinStars
@@ -96,7 +105,7 @@ var _retry_button: Button
 func _ready() -> void:
 	_seed_rng.randomize()
 	_fx_rng.randomize()
-	_match = LocalMatch.new(MATCH_CONFIG, HAND_NAMES, HAND_EFFECTS)
+	_match = LocalMatch.new(MATCH_CONFIG, HAND_NAMES, HAND_EFFECTS, HAND_RULES)
 	_build()
 	_setup_players(OS.get_cmdline_user_args())
 	_match.round_started.connect(_on_round_started)
@@ -114,6 +123,8 @@ func _process(delta: float) -> void:
 		_unprocessed_seconds -= LocalMatch.TICK_SECONDS
 		_tick()
 	_my_view.interactive = _is_human_playing() and _match.can_operate()
+	_update_live(_my_live_label, MY_PLAYER)
+	_update_live(_their_live_label, THEIR_PLAYER)
 	_shake(delta)
 
 
@@ -164,7 +175,9 @@ func _build() -> void:
 	_their_view.facing_down = true
 	_their_view.mouse_filter = MOUSE_FILTER_IGNORE
 	_my_view = _add_hand_view(_match.hands[MY_PLAYER], MY_HAND_RECT, MY_SLEEVE_COLOR)
-	_my_view.finger_flipped.connect(_on_my_finger_flipped)
+	_my_view.finger_moved.connect(_on_my_finger_moved)
+	_their_live_label = _add_label(THEIR_LIVE_RECT, LIVE_FONT_SIZE)
+	_my_live_label = _add_label(MY_LIVE_RECT, LIVE_FONT_SIZE)
 	_their_effect_label = _add_label(THEIR_EFFECT_RECT, EFFECT_FONT_SIZE)
 	_their_name_label = _add_label(THEIR_NAME_RECT, NAME_FONT_SIZE)
 	_their_tape = CensorTape.new()
@@ -185,7 +198,7 @@ func _build() -> void:
 
 func _add_hand_view(model: HandModel, rect: Rect2, sleeve: Color) -> HandView:
 	var view := HandView.new()
-	view.bind(model)
+	view.bind(model, _match.judge)
 	view.sleeve_color = sleeve
 	_place(_stage, view, rect)
 	return view
@@ -247,8 +260,8 @@ func _start_match() -> void:
 		_match.start(_seed_rng.randi())
 
 
-func _on_my_finger_flipped(finger: HandTypes.Finger) -> void:
-	_match.flip(MY_PLAYER, finger)
+func _on_my_finger_moved(finger: HandTypes.Finger, curl: int) -> void:
+	_match.move(MY_PLAYER, finger, curl)
 
 
 func _on_round_started() -> void:
@@ -306,7 +319,27 @@ func _on_match_finished(winner: int) -> void:
 
 
 func _stamp_name(label: StampLabel, hand_name: String, shape: HandTypes.Shape) -> void:
-	label.stamp(hand_name, NAMED_COLOR if shape == HandTypes.Shape.NAMED else TEXT_COLOR)
+	label.stamp(hand_name, _shape_color(shape))
+
+
+func _shape_color(shape: HandTypes.Shape) -> Color:
+	match shape:
+		HandTypes.Shape.NAMED:
+			return NAMED_COLOR
+		HandTypes.Shape.FOUL:
+			return FOUL_COLOR
+	return TEXT_COLOR
+
+
+## 掛け声の間、いまの手の名前と勝ち条件を出す(GameDesign 5章)。モザイクの掛かった手は出さない。
+func _update_live(label: StampLabel, player: int) -> void:
+	if not _match.can_operate() or _match.effects.is_censored(player):
+		label.clear()
+		return
+	var curls := _match.hands[player].curls
+	var states := _match.judge.states_of(curls)
+	var line := _match.judge.hand_name(curls) + LIVE_SEPARATOR + _match.judge.condition_text(states)
+	label.put(line, _shape_color(HandShapeJudge.shape_of(states)))
 
 
 func _show_effect(label: StampLabel, effect: HandEffect, target_name: String) -> void:

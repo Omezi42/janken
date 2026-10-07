@@ -1,11 +1,13 @@
 class_name HandView
 extends Control
-## HandModel をマンガ風の手で描き、interactive ならつかんで引いた指の反転を finger_flipped で知らせる
+## HandModel をマンガ風の手で描き、interactive ならつかんで引いた指の曲がり具合を finger_moved で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
-## 引く: 押した位置に一番近い見えている指をつかみ、押した位置から反対の状態の向き(下が曲がり)へ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻す。
+## 引く: 押した位置に一番近い見えている指をつかみ、つかんだときの曲がり具合に上下の移動(下が曲がり。PULL_DISTANCE で伸びきりから曲がりきり)を足す。
+## 離した長さで止まる。
 
-signal finger_flipped(finger: HandTypes.Finger)
+## curl は 0〜HandModel.CURL_MAX。
+signal finger_moved(finger: HandTypes.Finger, curl: int)
 
 
 class Spark:
@@ -43,9 +45,9 @@ const TIP_WIDTH_RATIO := 0.85
 ## 曲がりきった指の見える長さ(伸びきりに対する比)と、太る割合。
 const CURLED_LENGTH_RATIO := 0.3
 const CURLED_FATTEN := 0.15
-## 反転の距離(GameDesign 6.1節。基準解像度のピクセル)。つかんだ指の見た目は、この2倍で伸びきりから曲がりきりまで動く。
-const FLIP_DISTANCE := 80.0
-## 見た目の曲がり具合が状態へ追いつくばね(行き過ぎは約1割)。
+## 伸びきりから曲がりきりまでの引く距離(GameDesign 6.1節。基準解像度のピクセル)。
+const PULL_DISTANCE := 160.0
+## 見た目の曲がり具合が HandModel へ追いつくばね(行き過ぎは約1割)。
 const CURL_STIFFNESS := 300.0
 const CURL_DAMPING := 20.0
 ## 指の管を描くときの点の数。
@@ -60,7 +62,7 @@ const NAIL_HIDDEN_CURL := 0.5
 const NAIL_SEGMENTS := 16
 ## 触っている指の光る縁の太さ。
 const GLOW_WIDTH := 0.1
-## 反転したときの火花(数・速さ・寿命・大きさ)。
+## 指の状態が変わったときの火花(数・速さ・寿命・大きさ)。
 const SPARK_COUNT := 7
 const SPARK_SPEED := 2.6
 const SPARK_LIFE := 0.35
@@ -95,6 +97,8 @@ const WOBBLE_SECONDS := 0.08
 const WOBBLE_COUNT := 3
 
 const SKIN_COLOR := Color("f7c59f")
+## 中途半端な指の色(GameDesign 8.1節)。
+const HALF_SKIN_COLOR := Color("c9a8f0")
 const CREASE_COLOR := Color("cf8a62")
 const OUTLINE_COLOR := Color("3b2416")
 const NAIL_COLOR := Color("ffe6dc")
@@ -119,15 +123,16 @@ var pose_offset := Vector2.ZERO
 var pose_scale := 1.0
 var pose_tilt := 0.0
 var _model: HandModel
+var _judge: HandShapeJudge
 ## 押しているポインタ(マウスは MOUSE_POINTER、タッチは番号)。同時に1つだけ。
 var _pointer := NO_POINTER
 ## 押しているポインタの位置(演出を除いた手のローカル座標)と、つかんでいる指。
 var _pointer_local := Vector2.ZERO
 var _touched := NO_FINGER
-## つかんだときのポインタの y と指の状態、いま反転の距離を越えているか。
+## つかんだときのポインタの y と曲がり具合(0.0〜1.0)、最後に知らせた曲がり具合。
 var _grab_y := 0.0
-var _grab_curled := false
-var _past_flip := false
+var _grab_curl := 0.0
+var _sent_curl := 0
 ## 見た目だけの曲がり具合(0.0 伸びきり 〜 1.0 曲がりきり。ばねで行き過ぎる)と速さ。
 var _curls := PackedFloat32Array()
 var _curl_velocities := PackedFloat32Array()
@@ -141,8 +146,9 @@ var _sleeve_box := StyleBoxFlat.new()
 var _rng := RandomNumberGenerator.new()
 
 
-func bind(model: HandModel) -> void:
+func bind(model: HandModel, judge: HandShapeJudge) -> void:
 	_model = model
+	_judge = judge
 	_curves.clear()
 	_states.clear()
 	for i in HandTypes.Finger.size():
@@ -164,7 +170,7 @@ func reset_pose() -> void:
 	_release()
 	_sparks.clear()
 	for i in HandTypes.Finger.size():
-		_states[i] = _model.states[i]
+		_states[i] = _state(i)
 		_curls[i] = _goal_curl(i)
 		_curl_velocities[i] = 0.0
 
@@ -226,7 +232,7 @@ func _process(delta: float) -> void:
 			_curls[i] += _curl_velocities[i] * step
 		var base: Vector2 = FINGER_BASES[i] * unit
 		var tip := base + _direction(i) * _visible_length(i, unit)
-		var state: int = _model.states[i]
+		var state := _state(i)
 		if state != _states[i]:
 			if _states[i] != NO_STATE and not censored:
 				_spawn_sparks(tip, unit)
@@ -294,7 +300,8 @@ func _draw_finger(finger: int, unit: float, touched: bool) -> void:
 	if touched:
 		_draw_tube(curve, width, tip_width, outline + GLOW_WIDTH * unit, GLOW_COLOR)
 	_draw_tube(curve, width, tip_width, outline, OUTLINE_COLOR)
-	_draw_tube(curve, width, tip_width, 0.0, SKIN_COLOR)
+	var half := _states[finger] == HandTypes.FingerState.HALF
+	_draw_tube(curve, width, tip_width, 0.0, HALF_SKIN_COLOR if half else SKIN_COLOR)
 	for fraction in CREASE_FRACTIONS:
 		_draw_crease(curve, fraction, lerpf(width, tip_width, fraction), outline / 2.0)
 	var nail_alpha := clampf(1.0 - curl / NAIL_HIDDEN_CURL, 0.0, 1.0)
@@ -419,19 +426,19 @@ func _press(pointer: int, at: Vector2, pressed: bool) -> void:
 	_pointer_local = _rest_transform().affine_inverse() * at
 	_touched = _finger_at(_pointer_local / _unit())
 	_grab_y = _pointer_local.y
-	_grab_curled = _model.settled_state(_touched) == HandTypes.FingerState.CURLED
-	_past_flip = false
+	_sent_curl = _model.settled_curl(_touched as HandTypes.Finger)
+	_grab_curl = float(_sent_curl) / HandModel.CURL_MAX
 
 
-## つかんだ指を反対の状態の向きへ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻すよう知らせる。
+## つかんだ指の曲がり具合が変わったら知らせる。
 func _drag(pointer: int, at: Vector2) -> void:
 	if pointer != _pointer:
 		return
 	_pointer_local = _rest_transform().affine_inverse() * at
-	var past := _pull() > FLIP_DISTANCE
-	if past != _past_flip:
-		_past_flip = past
-		finger_flipped.emit(_touched as HandTypes.Finger)
+	var curl := roundi(_grabbed_curl() * HandModel.CURL_MAX)
+	if curl != _sent_curl:
+		_sent_curl = curl
+		finger_moved.emit(_touched as HandTypes.Finger, curl)
 
 
 func _release() -> void:
@@ -439,16 +446,9 @@ func _release() -> void:
 	_touched = NO_FINGER
 
 
-## つかんだ位置から、反対の状態の向き(伸びていれば下、曲がっていれば上)へ動いた距離。
-func _pull() -> float:
-	var down := _pointer_local.y - _grab_y
-	return -down if _grab_curled else down
-
-
-## つかんでいる指の見た目の曲がり具合(ポインタに付いて動く)。
+## つかんでいる指の曲がり具合(0.0〜1.0。ポインタに付いて動く)。
 func _grabbed_curl() -> float:
-	var start := 1.0 if _grab_curled else 0.0
-	return clampf(start + (_pointer_local.y - _grab_y) / (FLIP_DISTANCE * 2.0), 0.0, 1.0)
+	return clampf(_grab_curl + (_pointer_local.y - _grab_y) / PULL_DISTANCE, 0.0, 1.0)
 
 
 ## at は手の大きさに対する比。いまの見た目の指(付け根から指先までの線分)が一番近い指(GameDesign 6.1節)。
@@ -466,7 +466,11 @@ func _finger_at(at: Vector2) -> int:
 
 
 func _goal_curl(finger: int) -> float:
-	return 1.0 if _model.is_curled(finger) else 0.0
+	return float(_model.curls[finger]) / HandModel.CURL_MAX
+
+
+func _state(finger: int) -> HandTypes.FingerState:
+	return _judge.state_of(_model.curls[finger])
 
 
 ## 演出(弾み・突き出し)を除いた手の位置。入力の対応に使う(拍で弾んでも同じ位置なら同じ帯にするため)。

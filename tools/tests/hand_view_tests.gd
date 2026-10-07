@@ -1,14 +1,21 @@
 extends RefCounted
 ## HandView の引っぱる操作(GameDesign 6.1節)。押した位置に一番近い見えている指をつかみ、
-## 反転の距離を越えたら反転・戻ったら元に戻す。
+## つかんだときの曲がり具合に上下の移動を足して知らせる。
 
 const E := HandTypes.FingerState.EXTENDED
 const C := HandTypes.FingerState.CURLED
+const MAX := HandModel.CURL_MAX
+const HALF_CURL := 50
+const BACK_RATIO := 0.3
 const VIEW_SIZE := Vector2(720.0, 563.0)
 
 var _view: HandView
 var _model := HandModel.new()
-var _flipped := []
+var _judge := HandShapeJudge.new(
+	load("res://data/hand_name_table.tres"), load("res://data/hand_rule_table.tres")
+)
+## 知らせた [指, 曲がり具合] の並び。
+var _moves := []
 ## 押した位置(手のローカル座標のピクセル)。
 var _grab_at := Vector2.ZERO
 
@@ -16,8 +23,10 @@ var _grab_at := Vector2.ZERO
 func run(assert_true: Callable) -> void:
 	_view = HandView.new()
 	_view.size = VIEW_SIZE
-	_view.bind(_model)
-	_view.finger_flipped.connect(func(finger: HandTypes.Finger) -> void: _flipped.append(finger))
+	_view.bind(_model, _judge)
+	_view.finger_moved.connect(
+		func(finger: HandTypes.Finger, curl: int) -> void: _moves.append([finger, curl])
+	)
 	_test_pull(assert_true)
 	_test_push_up(assert_true)
 	_test_one_finger_per_grab(assert_true)
@@ -28,30 +37,36 @@ func run(assert_true: Callable) -> void:
 func _test_pull(assert_true: Callable) -> void:
 	_pose([E, E, E, E, E])
 	_press(HandTypes.Finger.MIDDLE)
-	_drag(Vector2(0.0, HandView.FLIP_DISTANCE * 0.9))
-	assert_true.call(_flipped.is_empty(), "反転の距離に届かなければ反転しない")
-	_drag(Vector2(0.0, HandView.FLIP_DISTANCE * 1.1))
-	assert_true.call(_flipped == [HandTypes.Finger.MIDDLE], "伸びた指を下へ引いて距離を越えたら反転 %s" % [_flipped])
-	_drag(Vector2(0.0, HandView.FLIP_DISTANCE * 0.5))
-	assert_true.call(_flipped.size() == 2, "距離の内へ戻したら元に戻す")
+	_drag(Vector2(0.0, HandView.PULL_DISTANCE * 0.5))
+	assert_true.call(_last() == [HandTypes.Finger.MIDDLE, HALF_CURL], "引いた分だけ曲がる %s" % [_moves])
+	_drag(Vector2(0.0, HandView.PULL_DISTANCE * 1.5))
+	assert_true.call(_last() == [HandTypes.Finger.MIDDLE, MAX], "曲がりきりの先では止まる %s" % [_last()])
+	_drag(Vector2(0.0, HandView.PULL_DISTANCE * BACK_RATIO))
+	assert_true.call(
+		_last() == [HandTypes.Finger.MIDDLE, roundi(MAX * BACK_RATIO)], "戻すと伸びる %s" % [_last()]
+	)
 	_release()
 
 
 func _test_push_up(assert_true: Callable) -> void:
 	_pose([C, C, C, C, C])
 	_press(HandTypes.Finger.INDEX)
-	_drag(Vector2(0.0, HandView.FLIP_DISTANCE * 2.0))
-	assert_true.call(_flipped.is_empty(), "曲がった指を下へ引いても反転しない")
-	_drag(Vector2(0.0, -HandView.FLIP_DISTANCE * 1.1))
-	assert_true.call(_flipped == [HandTypes.Finger.INDEX], "曲がった指は上へ押し上げて反転")
+	_drag(Vector2(0.0, HandView.PULL_DISTANCE))
+	assert_true.call(_moves.is_empty(), "曲がりきった指を下へ引いても変わらない")
+	_drag(Vector2(0.0, -HandView.PULL_DISTANCE * 0.5))
+	assert_true.call(_last() == [HandTypes.Finger.INDEX, HALF_CURL], "曲がった指は上へ押し上げて伸ばす")
 	_release()
 
 
 func _test_one_finger_per_grab(assert_true: Callable) -> void:
 	_pose([E, E, E, E, E])
 	_press(HandTypes.Finger.INDEX)
-	_drag(Vector2(VIEW_SIZE.x / 2.0, HandView.FLIP_DISTANCE * 1.1))
-	assert_true.call(_flipped == [HandTypes.Finger.INDEX], "横へ動いてもつかんだ指だけ反転 %s" % [_flipped])
+	_drag(Vector2(VIEW_SIZE.x / 2.0, HandView.PULL_DISTANCE))
+	var fingers := _moves.map(func(move: Array) -> int: return move[0])
+	assert_true.call(
+		not fingers.is_empty() and fingers.count(HandTypes.Finger.INDEX) == fingers.size(),
+		"横へ動いてもつかんだ指だけ動く %s" % [_moves]
+	)
 	_release()
 
 
@@ -60,17 +75,23 @@ func _test_grab_curled_fingers(assert_true: Callable) -> void:
 		for finger in HandTypes.Finger.size():
 			_pose(pose)
 			_press(finger)
-			_drag(Vector2(0.0, HandView.FLIP_DISTANCE * (-1.1 if pose[finger] == C else 1.1)))
+			var toward := -0.5 if pose[finger] == C else 0.5
+			_drag(Vector2(0.0, HandView.PULL_DISTANCE * toward))
 			assert_true.call(
-				_flipped == [finger], "見えている指を押せばその指をつかむ %s 指%d → %s" % [pose, finger, _flipped]
+				not _moves.is_empty() and _moves[0][0] == finger,
+				"見えている指を押せばその指をつかむ %s 指%d → %s" % [pose, finger, _moves]
 			)
 			_release()
 
 
+func _last() -> Array:
+	return [] if _moves.is_empty() else _moves.back()
+
+
 func _pose(pose: Array) -> void:
-	_model.set_pose(pose)
+	_model.set_pose(HandModel.pose_of(pose))
 	_view.reset_pose()
-	_flipped.clear()
+	_moves.clear()
 
 
 ## いま見えている指先の位置(手のローカル座標のピクセル)。

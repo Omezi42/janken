@@ -6,10 +6,12 @@ const PISTOL := "○○●●●"
 const INDEX_OVERSLEEP := "○●○○○"
 const STRONG_CENSOR := "○●○●●"
 const EFFECT_COUNT := 8
+const HALF_CURL := 50
 
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
 var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
+var _rules: HandRuleTable = load("res://data/hand_rule_table.tres")
 
 
 func run(assert_true: Callable) -> void:
@@ -17,6 +19,7 @@ func run(assert_true: Callable) -> void:
 	_test_censor_rounds(assert_true)
 	_test_oversleep_target(assert_true)
 	_test_match_applies_effects(assert_true)
+	_test_foul_has_no_effect(assert_true)
 
 
 func _test_table(assert_true: Callable) -> void:
@@ -51,7 +54,7 @@ func _test_oversleep_target(assert_true: Callable) -> void:
 
 
 func _test_match_applies_effects(assert_true: Callable) -> void:
-	var game := LocalMatch.new(_match_config, _names, _effects)
+	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
 	var results := []
 	game.round_judged.connect(func(result: LocalMatch.RoundResult) -> void: results.append(result))
 	game.start(SEED)
@@ -62,7 +65,7 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 	var first: LocalMatch.RoundResult = results[0]
 	assert_true.call(
 		first.my_shape == HandTypes.Shape.NAMED and first.outcome == HandTypes.Outcome.DRAW,
-		"名前付きの手どうしはあいこ"
+		"勝ち条件の無い手どうしはあいこ"
 	)
 	assert_true.call(
 		(
@@ -73,12 +76,12 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 	)
 	while game.phase != LocalMatch.Phase.CALLING:
 		game.tick()
-	assert_true.call(HandTypes.FingerState.CURLED in game.hands[1].states, "撃たれた指は曲がりから始まる")
+	assert_true.call(HandModel.CURL_MAX in game.hands[1].curls, "撃たれた指は曲がりきりから始まる")
 	var delays := game.hands[0].delay_ticks
 	var delay := roundi(_effects.oversleep_delay_seconds * LocalMatch.TICKS_PER_SECOND)
 	assert_true.call(
 		delays[HandTypes.Finger.INDEX] == delay and delays[HandTypes.Finger.MIDDLE] == 0,
-		"寝坊した指だけ反転が遅れる %s" % [delays]
+		"寝坊した指だけ動きが遅れる %s" % [delays]
 	)
 	_play_round(game, [_states_of("●●●●●"), _states_of("●●●●●")])
 	while game.phase != LocalMatch.Phase.CALLING:
@@ -86,20 +89,43 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 	assert_true.call(game.hands[0].delay_ticks[HandTypes.Finger.INDEX] == 0, "効果は1ラウンドで切れる")
 
 
-## 掛け声の終わりまで、両者の手を goals へ反転し続ける。
+func _test_foul_has_no_effect(assert_true: Callable) -> void:
+	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
+	var results := []
+	game.round_judged.connect(func(result: LocalMatch.RoundResult) -> void: results.append(result))
+	game.start(SEED)
+	_play_round(game, [_states_of(PISTOL), _states_of(PISTOL)])
+	if results.is_empty():
+		assert_true.call(false, "反則の確認で1ラウンド目が判定されない")
+		return
+	assert_true.call(results[0].my_effect != null, "反則でないピストルは効果が発動する")
+	while game.phase != LocalMatch.Phase.CALLING:
+		game.tick()
+	while game.phase == LocalMatch.Phase.CALLING:
+		var pose := HandModel.pose_of(_states_of(PISTOL))
+		pose[HandTypes.Finger.PINKY] = HALF_CURL
+		for finger in HandTypes.Finger.size():
+			if game.hands[0].settled_curl(finger as HandTypes.Finger) != pose[finger]:
+				game.move(0, finger as HandTypes.Finger, pose[finger])
+		game.tick()
+	var foul: LocalMatch.RoundResult = results[1]
+	assert_true.call(
+		foul.my_shape == HandTypes.Shape.FOUL and foul.my_effect == null, "反則では効果が発動しない"
+	)
+	assert_true.call(foul.my_name == "ゆるいピストル", "反則の名前 %s" % foul.my_name)
+
+
+## 掛け声の終わりまで、両者の手を goals へ動かし続ける。
 func _play_round(game: LocalMatch, goals: Array) -> void:
 	while game.phase == LocalMatch.Phase.CALLING:
 		for player in LocalMatch.PLAYER_COUNT:
 			var hand := game.hands[player]
+			var pose := HandModel.pose_of(goals[player])
 			for finger in HandTypes.Finger.size():
-				if hand.settled_state(finger) != goals[player][finger]:
-					game.flip(player, finger as HandTypes.Finger)
+				if hand.settled_curl(finger as HandTypes.Finger) != pose[finger]:
+					game.move(player, finger as HandTypes.Finger, pose[finger])
 		game.tick()
 
 
 func _states_of(key: String) -> Array:
-	var states := []
-	for mark in key:
-		var curled := mark == HandNameTable.CURLED_MARK
-		states.append(HandTypes.FingerState.CURLED if curled else HandTypes.FingerState.EXTENDED)
-	return states
+	return HandNameTable.states_of(key)

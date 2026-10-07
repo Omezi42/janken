@@ -1,0 +1,78 @@
+[gd_resource type="Resource" script_class="HandRuleTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/hand_condition.gd" id="1_cond"]
+[ext_resource type="Script" path="res://scripts/data/hand_rule_table.gd" id="2_rules"]
+
+[sub_resource type="Resource" id="Resource_cond0"]
+script = ExtResource("1_cond")
+kind = 0
+value = 1
+text = "チョキ系に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond1"]
+script = ExtResource("1_cond")
+kind = 0
+value = 2
+text = "パー系に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond2"]
+script = ExtResource("1_cond")
+kind = 0
+value = 0
+text = "グー系に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond3"]
+script = ExtResource("1_cond")
+kind = 1
+value = 0
+text = "本家に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond4"]
+script = ExtResource("1_cond")
+kind = 3
+value = 0
+text = "親指を曲げた手に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond5"]
+script = ExtResource("1_cond")
+kind = 4
+value = 4
+text = "小指を伸ばした手に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond6"]
+script = ExtResource("1_cond")
+kind = 2
+value = 0
+text = "名前付きの手に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond7"]
+script = ExtResource("1_cond")
+kind = 5
+value = 3
+text = "伸びた指が2本以下の手に勝つ"
+
+[sub_resource type="Resource" id="Resource_cond8"]
+script = ExtResource("1_cond")
+kind = 0
+value = 1
+text = "チョキ系に勝つ"
+
+[resource]
+script = ExtResource("2_rules")
+extended_below = 0.2
+curled_above = 0.8
+scissors_min_extended = 2
+paper_min_extended = 4
+conditions = Dictionary[String, ExtResource("1_cond")]({
+"●●●●●": SubResource("Resource_cond0"),
+"●○○●●": SubResource("Resource_cond1"),
+"○○○○○": SubResource("Resource_cond2"),
+"●○●●●": SubResource("Resource_cond3"),
+"○●●●●": SubResource("Resource_cond4"),
+"●●●●○": SubResource("Resource_cond5"),
+"●○●●○": SubResource("Resource_cond6"),
+"●○○○●": SubResource("Resource_cond7"),
+"○○●●○": SubResource("Resource_cond8")
+})
+no_condition_text = "勝ち条件なし"
+foul_text = "反則・必ず負け"

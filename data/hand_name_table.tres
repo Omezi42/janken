@@ -38,3 +38,6 @@ names = Dictionary[String, String]({
 "○○●○○": "中指だけ寝坊",
 "○●○○○": "人差し指だけ寝坊"
 })
+foul_original_format = "ほぼ{name}"
+foul_named_format = "ゆるい{name}"
+all_half_name = "グニャグニャ"
