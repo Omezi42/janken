@@ -1,6 +1,6 @@
 class_name HandView
 extends Control
-## HandModel をマンガ風のゴムホースの手で描き、interactive ならつかんで引いた指の反転を finger_flipped で知らせる
+## HandModel をマンガ風の手で描き、interactive ならつかんで引いた指の反転を finger_flipped で知らせる
 ## (GameDesign 6.1節・8.1節)。HandModel を直接動かさない(入力は LocalMatch が tick に揃えて記録・適用するため)。
 ## 手のローカル座標は手のひらの中心が原点で、指先が上(-Y)。寸法はすべて手の大きさ(短辺 × UNIT_RATIO)に対する比。
 ## 引く: 押した位置に一番近い見えている指をつかみ、押した位置から反対の状態の向き(下が曲がり)へ FLIP_DISTANCE 越えたら反転、内へ戻ったら元に戻す。
@@ -48,10 +48,8 @@ const FLIP_DISTANCE := 80.0
 ## 見た目の曲がり具合が状態へ追いつくばね(行き過ぎは約1割)。
 const CURL_STIFFNESS := 300.0
 const CURL_DAMPING := 20.0
-## 触っている指がポインタの方へ傾く角度の上限(度)・追いつく速さ・付け根から測る距離の下限(伸びきりの長さに対する比)。
-const LEAN_MAX := 12.0
-const LEAN_SPEED := 18.0
-const LEAN_MIN_REACH := 0.5
+## 指の管を描くときの点の数。
+const TUBE_SAMPLES := 24
 ## 関節のしわの位置(付け根からの比)と長さ(太さに対する比)。
 const CREASE_FRACTIONS := [0.5, 0.75]
 const CREASE_LENGTH := 0.5
@@ -60,10 +58,6 @@ const NAIL_SIZE := Vector2(0.3, 0.4)
 const NAIL_INSET := 0.35
 const NAIL_HIDDEN_CURL := 0.5
 const NAIL_SEGMENTS := 16
-## 止まっていてもうねる揺れ(指先の横ずれ・速さ・指ごとのずれ)。
-const IDLE_SWAY := 0.07
-const IDLE_SPEED := 2.3
-const IDLE_PHASE := 1.3
 ## 触っている指の光る縁の太さ。
 const GLOW_WIDTH := 0.1
 ## 反転したときの火花(数・速さ・寿命・大きさ)。
@@ -137,13 +131,9 @@ var _past_flip := false
 ## 見た目だけの曲がり具合(0.0 伸びきり 〜 1.0 曲がりきり。ばねで行き過ぎる)と速さ。
 var _curls := PackedFloat32Array()
 var _curl_velocities := PackedFloat32Array()
-## 見た目だけの傾き(度)。
-var _leans := PackedFloat32Array()
-var _softs: Array[SoftFinger] = []
 var _curves: Array[PackedVector2Array] = []
 var _states: Array[int] = []
 var _sparks: Array[Spark] = []
-var _time := 0.0
 var _tween: Tween
 var _palm_box := StyleBoxFlat.new()
 var _wrist_box := StyleBoxFlat.new()
@@ -153,14 +143,11 @@ var _rng := RandomNumberGenerator.new()
 
 func bind(model: HandModel) -> void:
 	_model = model
-	_softs.clear()
 	_curves.clear()
 	_states.clear()
 	for i in HandTypes.Finger.size():
-		_softs.append(SoftFinger.new())
 		_curves.append(PackedVector2Array())
 		_states.append(NO_STATE)
-	_leans.resize(HandTypes.Finger.size())
 	_curls.resize(HandTypes.Finger.size())
 	_curl_velocities.resize(HandTypes.Finger.size())
 	_rng.randomize()
@@ -175,10 +162,8 @@ func reset_pose() -> void:
 	pose_tilt = 0.0
 	modulate = Color.WHITE
 	_release()
-	_leans.fill(0.0)
 	_sparks.clear()
-	for i in _softs.size():
-		_softs[i].reset()
+	for i in HandTypes.Finger.size():
 		_states[i] = _model.states[i]
 		_curls[i] = _goal_curl(i)
 		_curl_velocities[i] = 0.0
@@ -230,9 +215,7 @@ func _process(delta: float) -> void:
 	if not interactive:
 		_release()
 	var step := minf(delta, MAX_VISUAL_DELTA)
-	_time += step
 	var unit := _unit()
-	_update_leans(step)
 	for i in HandTypes.Finger.size():
 		if i == _touched:
 			_curls[i] = _grabbed_curl()
@@ -248,9 +231,7 @@ func _process(delta: float) -> void:
 			if _states[i] != NO_STATE and not censored:
 				_spawn_sparks(tip, unit)
 			_states[i] = state
-		var sway := sin(_time * IDLE_SPEED + i * IDLE_PHASE) * IDLE_SWAY * unit
-		_softs[i].update(base, tip, sway, step)
-		_curves[i] = _softs[i].curve()
+		_curves[i] = _straight(base, tip)
 	_update_sparks(step)
 	queue_redraw()
 
@@ -470,14 +451,13 @@ func _grabbed_curl() -> float:
 	return clampf(start + (_pointer_local.y - _grab_y) / (FLIP_DISTANCE * 2.0), 0.0, 1.0)
 
 
-## at は手の大きさに対する比。傾きを除いたいまの見た目の指(付け根から指先までの線分)が一番近い指(GameDesign 6.1節)。
+## at は手の大きさに対する比。いまの見た目の指(付け根から指先までの線分)が一番近い指(GameDesign 6.1節)。
 func _finger_at(at: Vector2) -> int:
 	var nearest := 0
 	var nearest_distance := INF
 	for i in HandTypes.Finger.size():
 		var base: Vector2 = FINGER_BASES[i]
-		var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[i]))
-		var tip := base + direction * _visible_length(i, 1.0)
+		var tip := base + _direction(i) * _visible_length(i, 1.0)
 		var distance := at.distance_to(Geometry2D.get_closest_point_to_segment(at, base, tip))
 		if distance < nearest_distance:
 			nearest = i
@@ -487,20 +467,6 @@ func _finger_at(at: Vector2) -> int:
 
 func _goal_curl(finger: int) -> float:
 	return 1.0 if _model.is_curled(finger) else 0.0
-
-
-## 触っている指をポインタの方へ傾け、離れた指を戻す(見た目だけ)。
-func _update_leans(delta: float) -> void:
-	var follow := 1.0 - exp(-LEAN_SPEED * delta)
-	for i in _leans.size():
-		var goal := 0.0
-		if i == _touched:
-			var direction := Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[i]))
-			var offset: Vector2 = _pointer_local / _unit() - FINGER_BASES[i]
-			var reach: float = maxf(offset.dot(direction), FINGER_LENGTHS[i] * LEAN_MIN_REACH)
-			var side := offset.dot(direction.rotated(PI / 2.0))
-			goal = clampf(rad_to_deg(atan2(side, reach)), -LEAN_MAX, LEAN_MAX)
-		_leans[i] = lerpf(_leans[i], goal, follow)
 
 
 ## 演出(弾み・突き出し)を除いた手の位置。入力の対応に使う(拍で弾んでも同じ位置なら同じ帯にするため)。
@@ -524,7 +490,15 @@ func _unit() -> float:
 
 
 func _direction(finger: int) -> Vector2:
-	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger] + _leans[finger]))
+	return Vector2.UP.rotated(deg_to_rad(FINGER_ANGLES[finger]))
+
+
+## 付け根から指先までの直線上に、管を描く点を並べる。
+func _straight(base: Vector2, tip: Vector2) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for s in TUBE_SAMPLES + 1:
+		points.append(base.lerp(tip, float(s) / TUBE_SAMPLES))
+	return points
 
 
 func _visible_length(finger: int, unit: float) -> float:
