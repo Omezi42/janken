@@ -2,7 +2,7 @@ class_name OnlineMatch
 extends MatchSession
 ## オンラインの1試合(GameDesign 7章、Architecture 3.2節・4.2節)。プレイヤー 0 が自分、1 が相手。
 ## 判定は部屋が行い、ここは届いた予定どおりに掛け声を進め、結果を知らせるだけ。
-## called / judged は手元の区間が追いついてから知らせる(時計のずれで表示の順が崩れないため)。
+## judged は手元の掛け声が終わってから知らせる(時計のずれで表示の順が崩れないため)。
 
 ## 自分の接続が切れた(試合は終わり。結果は無い)。
 signal connection_lost
@@ -19,28 +19,25 @@ const OUTCOMES := {
 ## 相手が切れて不戦勝になった。
 var opponent_left := false
 var _net: NetClient
-var _config: MatchConfig
 ## 掛け声の始まり(手元の時刻、ミリ秒)。
 var _round_at := 0.0
 var _segment := 0
 var _result_started := 0
 var _pending_round := {}
-var _pending_called := {}
 var _pending_judged := {}
 var _final_judged := false
 
 
 func _init(
 	net: NetClient,
-	match_config: MatchConfig,
+	config: MatchConfig,
 	names: HandNameTable,
 	rule_table: HandRuleTable,
 	my_name: String,
 	their_name: String
 ) -> void:
-	super(names, rule_table, match_config)
+	super(names, rule_table, config)
 	_net = net
-	_config = match_config
 	player_names = PackedStringArray([my_name, their_name])
 	phase = Phase.WAITING
 	_net.message.connect(_on_message)
@@ -71,7 +68,7 @@ func tick() -> void:
 			_try_judge()
 		Phase.RESULT:
 			if state.is_over():
-				if now - _result_started >= _config.result_display_seconds * MS_PER_SECOND:
+				if now - _result_started >= match_config.result_display_seconds * MS_PER_SECOND:
 					phase = Phase.OVER
 					match_finished.emit(state.winner())
 			else:
@@ -97,17 +94,13 @@ func _try_start_round(now: int) -> void:
 func _tick_call(now: int) -> void:
 	for hand in hands:
 		hand.step()
-	var segment := _config.call_segment_at((now - _round_at) / MS_PER_SECOND)
-	if segment >= _config.call_segment_seconds.size():
+	var segment := match_config.call_segment_at((now - _round_at) / MS_PER_SECOND)
+	if segment >= match_config.call_segment_seconds.size():
 		phase = Phase.JUDGING
 		_try_judge()
 		return
 	if segment != _segment:
 		_enter_segment(segment)
-	if not _pending_called.is_empty() and _segment >= _config.hand_call_segment:
-		var called := _pending_called
-		_pending_called = {}
-		hands_called.emit(name_hands(_curls_of(called["mine"]), _curls_of(called["theirs"])))
 
 
 func _enter_segment(segment: int) -> void:
@@ -120,7 +113,6 @@ func _try_judge() -> void:
 		return
 	var judged := _pending_judged
 	_pending_judged = {}
-	_pending_called = {}
 	hands[MY_PLAYER].set_pose(_curls_of(judged["mine"]))
 	hands[THEIR_PLAYER].set_pose(_curls_of(judged["theirs"]))
 	var result := name_hands(hands[MY_PLAYER].curls, hands[THEIR_PLAYER].curls)
@@ -137,13 +129,11 @@ func _on_message(data: Dictionary) -> void:
 	match data.get("t"):
 		"round":
 			_pending_round = data
-		"called":
-			_pending_called = data
 		"judged":
 			_pending_judged = data
 			var wins: Array = data.get("wins", [])
 			_final_judged = wins.any(
-				func(w: Variant) -> bool: return int(w) >= _config.wins_to_finish
+				func(w: Variant) -> bool: return int(w) >= match_config.wins_to_finish
 			)
 			if _final_judged:
 				_net.close()

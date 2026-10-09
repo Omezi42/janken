@@ -1,6 +1,6 @@
 class_name TitleScreen
 extends Control
-## タイトル(GameDesign 9.1節・9.2節)。名前の入力と、ランダムマッチ・合言葉・ひとりで練習。
+## タイトル(GameDesign 9.1節・9.2節)。名前の入力と、ランダムマッチ・合言葉・一人で練習。
 
 ## entered_name は入力された名前(空のこともある)。
 signal chosen(choice: Choice, entered_name: String)
@@ -8,11 +8,11 @@ signal chosen(choice: Choice, entered_name: String)
 enum Choice { RANDOM, PASSCODE, PRACTICE }
 
 const TITLE_TEXT := "じゃんけん"
-const NAME_CAPTION := "なまえ"
+const NAME_CAPTION := "名前"
 const CHOICE_TEXTS := {
 	Choice.RANDOM: "ランダムマッチ",
 	Choice.PASSCODE: "合言葉",
-	Choice.PRACTICE: "ひとりで練習",
+	Choice.PRACTICE: "一人で練習",
 }
 const TITLE_FONT_SIZE := 120
 const CAPTION_FONT_SIZE := 36

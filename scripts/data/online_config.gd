@@ -5,10 +5,10 @@ extends Resource
 ## 既定のサーバー(起動引数 --server= で上書きする)。
 @export var server_url: String
 @export var name_max_length: int
-## 名前が空のとき、prefix + suffixes のどれか(例: ななしのグー)。
+## 名前が空のとき、prefix + suffixes のどれか(例: 名無しのグー)。
 @export var default_name_prefix: String
 @export var default_name_suffixes: Array[String] = []
-## ひとりで練習の相手の名前。
+## 一人で練習の相手の名前。
 @export var bot_name: String
 @export var passcode_length: int
 ## 部屋につないだ直後に ping を送る回数。往復の一番短い回で時計を合わせる。

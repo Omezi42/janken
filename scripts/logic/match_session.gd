@@ -5,8 +5,6 @@ extends RefCounted
 
 signal round_started
 signal call_segment_changed(index: int)
-## 手の名前を呼ぶ区間の始まり。call.outcome は使わない。
-signal hands_called(call: RoundResult)
 signal round_judged(result: RoundResult)
 signal match_finished(winner: int)
 
@@ -37,15 +35,17 @@ var state: MatchState
 var phase := Phase.OVER
 var effects := ActiveEffects.new()
 var judge: HandShapeJudge
+var match_config: MatchConfig
 ## 両者の名前(GameDesign 9.2節)。
 var player_names := PackedStringArray(["", ""])
 
 
-func _init(names: HandNameTable, rule_table: HandRuleTable, match_config: MatchConfig) -> void:
+func _init(names: HandNameTable, rule_table: HandRuleTable, config: MatchConfig) -> void:
 	judge = HandShapeJudge.new(names, rule_table)
+	match_config = config
 	for player in PLAYER_COUNT:
 		hands.append(HandModel.new())
-	state = MatchState.new(match_config)
+	state = MatchState.new(config)
 
 
 func can_operate() -> bool:

@@ -13,8 +13,7 @@ const PULL_SECONDS := Vector2(0.15, 0.3)
 ## 引き足りずに途中で離す確率と、そのとき目標まで動かす割合(下限・上限)。
 const MISS_CHANCE := 0.12
 const MISS_REACH := Vector2(0.3, 0.7)
-## 相手の手を見て組み替える区間(ぽん)と、組み替える確率。
-const READ_SEGMENT := 4
+## 掛け声の最後の区間(ぽん)に入ったとき、相手の手を見て組み替える確率。
 const READ_CHANCE := 0.6
 
 var _match: MatchSession
@@ -75,7 +74,8 @@ func _on_round_started() -> void:
 
 
 func _on_call_segment_changed(index: int) -> void:
-	if index != READ_SEGMENT or _rng.randf() >= READ_CHANCE:
+	var last_segment := _match.match_config.call_segment_seconds.size() - 1
+	if index != last_segment or _rng.randf() >= READ_CHANCE:
 		return
 	var opponent := ActiveEffects.opponent_of(_player)
 	if _match.effects.is_censored(opponent):

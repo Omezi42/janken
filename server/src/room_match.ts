@@ -24,7 +24,6 @@ function sum(values: number[]): number {
   return values.reduce((a, b) => a + b, 0);
 }
 
-const CALLED_OFFSET_MS = secondsToMs(sum(rules.callSegmentSeconds.slice(0, rules.handCallSegment)));
 const JUDGE_OFFSET_MS = secondsToMs(sum(rules.callSegmentSeconds));
 const RESULT_MS = secondsToMs(rules.resultDisplaySeconds);
 const START_DELAY_MS = secondsToMs(rules.matchStartDelaySeconds);
@@ -37,7 +36,6 @@ export class RoomMatch {
   private joined = [false, false];
   private roundAt = 0;
   private nextPoses: number[][] = [[], []];
-  private calledSent = false;
   private buckets: Bucket[] = [];
   private callbacks: RoomCallbacks;
   private random: () => number;
@@ -93,7 +91,7 @@ export class RoomMatch {
       case "announced":
         return this.roundAt;
       case "calling":
-        return this.roundAt + (this.calledSent ? JUDGE_OFFSET_MS : CALLED_OFFSET_MS);
+        return this.roundAt + JUDGE_OFFSET_MS;
     }
     return null;
   }
@@ -104,9 +102,6 @@ export class RoomMatch {
       if (wake === null || now < wake) return;
       if (this.phase === "announced") {
         this.startRound();
-      } else if (!this.calledSent) {
-        this.calledSent = true;
-        this.sendBoth({ t: "called" });
       } else {
         this.judge();
       }
@@ -134,7 +129,6 @@ export class RoomMatch {
 
   private startRound(): void {
     this.phase = "calling";
-    this.calledSent = false;
     this.curls = this.nextPoses.map((pose) => [...pose]);
     this.buckets = this.curls.map(() => ({ tokens: rules.moveBurst, at: this.roundAt }));
   }
@@ -175,11 +169,5 @@ export class RoomMatch {
       return;
     }
     this.announceRound(this.roundAt + JUDGE_OFFSET_MS + RESULT_MS);
-  }
-
-  private sendBoth(message: Message): void {
-    for (let p = 0; p < PLAYER_COUNT; p++) {
-      this.callbacks.send(p, { ...message, mine: this.curls[p], theirs: this.curls[1 - p] });
-    }
   }
 }

@@ -43,7 +43,6 @@ func _rules() -> Dictionary:
 		"curlMax": HandModel.CURL_MAX,
 		"winsToFinish": MATCH_CONFIG.wins_to_finish,
 		"callSegmentSeconds": MATCH_CONFIG.call_segment_seconds,
-		"handCallSegment": MATCH_CONFIG.hand_call_segment,
 		"resultDisplaySeconds": MATCH_CONFIG.result_display_seconds,
 		"extendedBelow": HAND_RULES.extended_below,
 		"curledAbove": HAND_RULES.curled_above,

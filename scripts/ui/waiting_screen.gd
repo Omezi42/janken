@@ -4,10 +4,10 @@ extends Control
 
 signal cancelled
 
-const SEARCHING_TEXT := "さがしています"
+const SEARCHING_TEXT := "探しています"
 const PASSCODE_FORMAT := "合言葉 {passcode}"
 const CANCEL_TEXT := "やめる"
-## 「さがしています」の後ろで増えていく点の数と、1つ増える秒数。
+## 「探しています」の後ろで増えていく点の数と、1つ増える秒数。
 const DOT := "."
 const DOT_COUNT := 3
 const DOT_SECONDS := 0.4

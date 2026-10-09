@@ -69,9 +69,8 @@ test("掛け声の間だけ動かせ、ぽんの時刻に部屋の手で判定�
   assert.equal(last(sent, 1, "move"), undefined, "掛け声の前は受け入れない");
   room.advance(at);
   playPaperVsRock(room, at);
-  assert.equal(last(sent, 0, "called"), undefined);
-  room.advance(at + rules.callSegmentSeconds[0] * MS);
-  assert.ok(last(sent, 0, "called"));
+  room.advance(at + JUDGE_MS - 1);
+  assert.equal(last(sent, 0, "judged"), undefined, "ぽんの区間の終わりまでは判定しない");
   room.advance(at + JUDGE_MS);
   const j0 = last(sent, 0, "judged")!;
   const j1 = last(sent, 1, "judged")!;

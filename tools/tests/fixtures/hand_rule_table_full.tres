@@ -7,55 +7,46 @@
 script = ExtResource("1_cond")
 kind = 0
 value = 1
-text = "指2〜3本に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond1"]
 script = ExtResource("1_cond")
 kind = 0
 value = 2
-text = "指4〜5本に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond2"]
 script = ExtResource("1_cond")
 kind = 0
 value = 0
-text = "指0〜1本に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond3"]
 script = ExtResource("1_cond")
 kind = 1
 value = 0
-text = "グーチョキパーに勝つ"
 
 [sub_resource type="Resource" id="Resource_cond4"]
 script = ExtResource("1_cond")
 kind = 3
 value = 0
-text = "親指を曲げた手に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond5"]
 script = ExtResource("1_cond")
 kind = 4
 value = 4
-text = "小指を伸ばした手に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond6"]
 script = ExtResource("1_cond")
 kind = 2
 value = 0
-text = "グーチョキパー以外に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond7"]
 script = ExtResource("1_cond")
 kind = 5
 value = 3
-text = "指0〜2本に勝つ"
 
 [sub_resource type="Resource" id="Resource_cond8"]
 script = ExtResource("1_cond")
 kind = 0
 value = 1
-text = "指2〜3本に勝つ"
 
 [resource]
 script = ExtResource("2_rules")
@@ -74,4 +65,3 @@ conditions = Dictionary[String, ExtResource("1_cond")]({
 "●○○○●": SubResource("Resource_cond7"),
 "○○●●○": SubResource("Resource_cond8")
 })
-no_condition_text = "勝ち条件なし"

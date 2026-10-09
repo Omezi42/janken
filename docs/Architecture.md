@@ -62,11 +62,10 @@
 | S→C | `match` | `opponent`(相手の名前) | 部屋に2人そろった |
 | S→C | `round` | `at`(掛け声の始まり)・`mine`・`theirs`(初期配置) | 試合開始時と、各判定の直後(次のラウンドの予定) |
 | S→C | `move` | `f`・`c` | 相手が指を動かした(部屋が受け入れた値) |
-| S→C | `called` | `mine`・`theirs` | 手の名前を呼ぶ区間の始まり。名前はクライアントが曲がり具合から付ける |
 | S→C | `judged` | `mine`・`theirs`・`outcome`(`win`/`lose`/`draw`)・`wins`(`[自分, 相手]`) | 「ぽん」の区間の終わり |
 | S→C | `left` | | 試合中に相手が切れた(受け取った側の不戦勝) |
 
-- **時刻**: 部屋は `round.at` から `MatchConfig` の区間の秒数を足して、名前を呼ぶ時刻と判定の時刻を出し、`setTimeout` で動く(tick を回し続けないため)。
+- **時刻**: 部屋は `round.at` に `MatchConfig` の区間の秒数を足して判定の時刻を出し、`setTimeout` で動く(tick を回し続けないため)。
   次のラウンドの `at` は判定の時刻 + 結果の表示時間。最初のラウンドは2人そろってから `match_start_delay_seconds` 後。
 - **時計合わせ**: クライアントは `ping` の往復が一番短かった回から、サーバー時刻と手元の時刻の差を出し、`at` を手元の時刻へ直して掛け声を進める。
 - **手の同期**: 自分の手は手元ですぐ動かして `move` を送る(操作の遅延を無くすため)。部屋は掛け声の間だけ受け入れ、相手へ中継する。
@@ -77,7 +76,7 @@
 
 ### 3.3 ルールの共有
 
-- サーバーは `.tres` を読めないため、`tools/export_rules.gd` が判定に要る値(勝ち数・掛け声の秒数・名前を呼ぶ区間・結果の表示時間・閾値・系統の区切り・勝ち条件・通信の数値)を
+- サーバーは `.tres` を読めないため、`tools/export_rules.gd` が判定に要る値(勝ち数・掛け声の秒数・結果の表示時間・閾値・系統の区切り・勝ち条件・通信の数値)を
   `server/src/rules.json` へ書き出す。手の名前はサーバーに要らない(曲がり具合を送ってクライアントが名前を付けるため)。
 - 判定のロジック(指の状態・形・系統・勝ち条件・勝敗)だけは `server/src/rules.ts` に GDScript と同じものを書く。
   `export_rules.gd` が乱数の曲がり具合の組と `RoundRules` の勝敗を `server/test/judge_fixture.json` へ書き出し、`node --test` で TypeScript の答えと突き合わせる。
@@ -99,9 +98,9 @@
 | `HandShapeJudge` | 曲がり具合 → 指の状態(`HandRuleTable` の閾値)、指の状態 → 手の形・系統、曲がり具合 → 名前(反則は0.5で寄せて「ほぼ」「ゆるい」を付ける)、手の勝ち条件の文 |
 | `RoundRules` | 2つの手の指の状態から勝敗(勝ち/負け/あいこ)を返す。反則を先に見て、残りは両者の勝ち条件(`HandRuleTable`)を満たすかで決める |
 | `MatchState` | 勝利数と試合終了の判定 |
-| `MatchSession` | `LocalMatch` と `OnlineMatch` の共通の型。シグナル(`round_started` / `call_segment_changed` / `hands_called` / `round_judged` / `match_finished`)・`RoundResult`・`Phase`・`hands` / `state` / `effects` / `judge`・`can_operate()` / `move()` / `tick()`・両者の名前 `player_names` を持つ(画面とボットがどちらの試合も同じに扱うため) |
+| `MatchSession` | `LocalMatch` と `OnlineMatch` の共通の型。シグナル(`round_started` / `call_segment_changed` / `round_judged` / `match_finished`)・`RoundResult`・`Phase`・`hands` / `state` / `effects` / `judge`・`can_operate()` / `move()` / `tick()`・両者の名前 `player_names` を持つ(画面とボットがどちらの試合も同じに扱うため) |
 | `ActiveEffects` | 掛かっている効果と残りラウンド数(モザイクを掛けられている手・寝坊している指・撃たれる手)。`trigger()` で発動、`end_round()` で1ラウンド減らす |
-| `LocalMatch` | `MatchSession`。オフラインの1試合(プレイヤー0・1)。`start(seed)` と固定間隔の `tick()` だけで掛け声(手の名前を呼ぶ区間で `hands_called`)→ 判定と効果の発動 → 結果表示 → 次のラウンド(効果を初期配置・`delay_ticks` へ反映)を進め、シグナルで知らせる。入力は `move(プレイヤー, 指, 曲がり具合)` で受ける(4.1節)。判定に使う `judge` と `rules` を表示層へも見せる |
+| `LocalMatch` | `MatchSession`。オフラインの1試合(プレイヤー0・1)。`start(seed)` と固定間隔の `tick()` だけで掛け声 → 判定と効果の発動 → 結果表示 → 次のラウンド(効果を初期配置・`delay_ticks` へ反映)を進め、シグナルで知らせる。入力は `move(プレイヤー, 指, 曲がり具合)` で受ける(4.1節)。判定に使う `judge` と `rules` を表示層へも見せる |
 | `HandBot` | 開発用の仮の相手。ラウンドごとに勝ち条件を持つ手(本家を含む)から1つ選び、人と同じ `MatchSession.move()` で、食い違う指を1本ずつ、人がつかんで引く程度の時間を掛けて伸びきり・曲がりきりへ動かす。ときどき引き足りずに途中で離す(中途半端が残る)。「ぽん」の区間に入ると、ときどき相手の手に勝つ手のうち直す指が一番少ない手へ組み替える(モザイク中は見ない)。`tick()` の直前に `think()` を呼ぶ。乱数は試合と別に持つ |
 | `MatchRecord` | 1試合の記録(seed と tick ごとの指の動き)。`to_text()` / `from_text()` で1行の文字列と相互変換する |
 | `MatchReplay` | `MatchRecord` を `LocalMatch` へ流し込んで試合を再現する |
@@ -130,7 +129,7 @@ seed と入力の列から試合を完全に再現できるようにする(不�
 |---|---|
 | `NetClient` | `WebSocketPeer` の薄い包み。`open(url)`・`poll()`・`send(dict)`、受け取った JSON を `message` シグナルで、切れたら `closed` で知らせる。部屋では時計合わせ(`ping`)を行い、`to_local_msec(サーバー時刻)` を出す |
 | `Matchmaker` | 待ち行列 → 部屋、または合言葉の部屋へつなぎ、`hello` を送って `match` を待つ。`matched(net, 相手の名前)` / `failed(理由)` を出す。`poll()` を毎フレーム呼ぶ |
-| `OnlineMatch` | `MatchSession`。つながった `NetClient` を受け、`round` の時刻に掛け声を始め、`called` / `judged` を手元の区間が追いついてから知らせる。判定で両者の手を `judged` の形へ揃え、勝敗は `judged.outcome` を `MatchState` へ記録する。`left` で不戦勝、自分の接続が切れたら `connection_lost` |
+| `OnlineMatch` | `MatchSession`。つながった `NetClient` を受け、`round` の時刻に掛け声を始め、`judged` を手元の掛け声が終わってから知らせる。判定で両者の手を `judged` の形へ揃え、勝敗は `judged.outcome` を `MatchState` へ記録する。`left` で不戦勝、自分の接続が切れたら `connection_lost` |
 
 時刻は `Time.get_ticks_msec()`(実時間)で進める。オンラインの試合は決定論・リプレイの対象外。
 
@@ -138,9 +137,9 @@ seed と入力の列から試合を完全に再現できるようにする(不�
 
 | Resource | 中身 | 仕様 |
 |---|---|---|
-| `MatchConfig` | 勝利に必要な勝ち数、掛け声の各区間の秒数と文字、手の名前を呼ぶ区間の番号、結果の表示時間 | GameDesign 5章 |
+| `MatchConfig` | 勝利に必要な勝ち数、掛け声の各区間の秒数と文字、結果の表示時間 | GameDesign 5章 |
 | `HandNameTable` | 5本の指の状態パターン → 名前(グー・チョキ・パーを含む32通り)、反則の名前の付け方(「ほぼ」「ゆるい」・グニャグニャ) | GameDesign 2.4節 |
-| `HandRuleTable` / `HandCondition` | 指の状態の閾値(伸び・曲がり)、系統の本数の区切り、指の状態パターン → 勝ち条件(種類・値・表示の文)、勝ち条件なしの表示の文 | GameDesign 2.1〜2.3節 |
+| `HandRuleTable` / `HandCondition` | 指の状態の閾値(伸び・曲がり)、系統の本数の区切り、指の状態パターン → 勝ち条件(種類・値) | GameDesign 2.1〜2.3節 |
 | `OnlineConfig` | サーバーの URL、名前の最大文字数と既定の名前、ボットの名前、合言葉の桁数、時計合わせの回数、最初のラウンドまでの秒数、指を動かせる量の上限 | GameDesign 4章・9章 |
 | `HandEffectTable` / `HandEffect` | 指の状態パターン → 効果(種類・続くラウンド数・結果表示の文)、寝坊した指の遅れ(秒)。寝坊する指はパターンの曲がった指から決める。`effect_of(states)` で引く | なし(表は空) |
 
@@ -168,21 +167,19 @@ seed と入力の列から試合を完全に再現できるようにする(不�
   - 指は付け根から指先までの直線に沿って太さの変わる管として描く。
 - 相手の `HandView` は入力を受けず、受信した指の状態を表示するだけ。
 - `App`(`scenes/main.tscn`、メインシーン): 画面を1つずつ子に置いて差し替える(GameDesign 9章)。プレイヤー名は `PlayerProfile`(`user://profile.cfg`)で読み書きする。
-  開発用の起動引数があればタイトルを飛ばしてひとりで練習を始める。
+  開発用の起動引数があればタイトルを飛ばして一人で練習を始める。
 
 | 画面 | 中身 |
 |---|---|
-| `TitleScreen` | 名前の入力欄(`LineEdit`)と「ランダムマッチ」「合言葉」「ひとりで練習」 |
-| `PasscodeScreen` | 4つの枠とテンキー(0〜9・けす・けってい)、もどる |
-| `WaitingScreen` | `Matchmaker` を回し、「さがしています…」と「やめる」。失敗は理由の文を出してタイトルへ |
+| `TitleScreen` | 名前の入力欄(`LineEdit`)と「ランダムマッチ」「合言葉」「一人で練習」 |
+| `PasscodeScreen` | 4つの枠とテンキー(0〜9・消す・決定)、戻る |
+| `WaitingScreen` | `Matchmaker` を回し、「探しています…」と「やめる」。失敗は理由の文を出してタイトルへ |
 | `BattleScreen` | 対戦(下記) |
 
-- `BattleScreen`: 背景・両者の `HandView`・勝利数の星と名前・掛け声とランプ・結果と手の名前・効果の文・勝ち条件の札(`HandTag`)・「もう一度」「タイトルへ」を置く。
+- `BattleScreen`: 背景・両者の `HandView`・勝利数の星と名前・掛け声とランプ・結果と手の名前・効果の文・「もう一度」「タイトルへ」を置く。
   `setup(session, bots)` で試合(`LocalMatch` か `OnlineMatch`)を受け取り、ボタンは `retry_requested` / `title_requested` で `App` へ返す。
   進行は試合が持ち、画面は実時間を tick へ刻んで回し(処理落ち時の追いつきは1フレーム8tickまで)、シグナルを受けて表示と演出(Tween)を変えるだけ。
-  子ノードは `_ready()` でコードから組む(シーンにはルートだけを置く)。揺れは手と文字をまとめた入れ物を動かす。ひとりで練習では試合終了時に記録の文字列を標準出力へ出す。
-  - 勝ち条件の札は毎フレーム両者の指の状態から決める。プレイヤーごとに直前の反則でない手の名前と勝ち条件の文を持ち、反則の間はそれを中途半端な指と同じ色で出す。
-    光るかは `RoundRules.beats()`(両者とも反則でなく、相手にモザイクが掛かっていないときだけ)。札は名前のハンコとほぼ同じ所に置き、手の名前を呼ぶ区間は隠す。
+  子ノードは `_ready()` でコードから組む(シーンにはルートだけを置く)。揺れは手と文字をまとめた入れ物を動かす。一人で練習では試合終了時に記録の文字列を標準出力へ出す。
 - 演出用の部品(すべて入力を通す `MOUSE_FILTER_IGNORE`):
 
 | クラス | 責務 |
@@ -193,7 +190,5 @@ seed と入力の列から試合を完全に再現できるようにする(不�
 | `StampLabel` | 文字を弾ませて出す(`pop()`)/ハンコのように押す(`stamp()`) |
 | `BeatLamps` | 掛け声の区間の数だけのランプ |
 | `WinStars` | 勝利に必要な数だけの星と、取った分の点灯 |
-| `CensorTape` | 名前の上に貼る規制テープ(斜めの帯と文字) |
-| `HandTag` | 手の名前(小)と勝ち条件の1行。光る(黄色・光った瞬間に弾む)/反則の間の色(中途半端な指と同じ)を描き分け、幅に収まらなければ小さくする |
 
 - 開発用の起動引数(`godot --path . -- <引数>`): `--replay=<記録の文字列>` でその試合を再生、`--bot-vs-bot` で手前もボットにして観戦する。

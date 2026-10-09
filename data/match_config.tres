@@ -5,7 +5,6 @@
 [resource]
 script = ExtResource("1_match")
 wins_to_finish = 3
-call_segment_seconds = Array[float]([1.0, 1.0, 1.0, 1.0, 1.0])
-call_words = Array[String](["さいしょは", "", "じゃん", "けん", "ぽん"])
-hand_call_segment = 1
+call_segment_seconds = Array[float]([2.0, 1.0, 1.0, 1.0])
+call_words = Array[String](["最初は", "じゃん", "けん", "ぽん"])
 result_display_seconds = 2.0

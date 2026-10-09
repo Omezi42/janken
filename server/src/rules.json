@@ -1,7 +1,6 @@
 {
 	"callSegmentSeconds": [
-		1.0,
-		1.0,
+		2.0,
 		1.0,
 		1.0,
 		1.0
@@ -25,8 +24,7 @@
 	"curledMark": "●",
 	"extendedBelow": 0.2,
 	"extendedMark": "○",
-	"fallbackName": "ななしのグー",
-	"handCallSegment": 1,
+	"fallbackName": "名無しのグー",
 	"matchStartDelaySeconds": 1.5,
 	"moveBurst": 200,
 	"moveRatePerSecond": 1000,

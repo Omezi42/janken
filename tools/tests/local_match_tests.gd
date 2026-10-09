@@ -6,8 +6,6 @@ const SEED := 42
 const MAX_MATCH_TICKS := MatchSession.TICKS_PER_SECOND * 600
 ## 相手を見て組み替える区間(ぽん)より前。
 const BOT_SETTLE_TICKS := roundi(MatchSession.TICKS_PER_SECOND * 2.5)
-## 名前を呼ぶ間も手を変え続ける間隔。
-const MOVE_INTERVAL_TICKS := 7
 const HALF_CURL := 50
 
 var _match_config: MatchConfig = load("res://data/match_config.tres")
@@ -21,12 +19,11 @@ func run(assert_true: Callable) -> void:
 	_test_bot_makes_shape(assert_true)
 	_test_full_match(assert_true)
 	_test_move_is_applied_on_tick(assert_true)
-	_test_hands_called(assert_true)
 
 
 func _test_call_segments(assert_true: Callable) -> void:
-	var segments := [0.0, 0.99, 1.0, 4.5, 5.0]
-	var expected := [0, 0, 1, 4, 5]
+	var segments := [0.0, 1.99, 2.0, 4.5, 5.0]
+	var expected := [0, 0, 1, 3, 4]
 	for i in segments.size():
 		var actual := _match_config.call_segment_at(segments[i])
 		assert_true.call(
@@ -84,7 +81,8 @@ func _test_full_match(assert_true: Callable) -> void:
 	assert_true.call(log["winner"] == game.state.winner(), "勝者が通知される")
 	assert_true.call(game.state.wins.max() == _match_config.wins_to_finish, "3勝で終わる")
 	assert_true.call(not game.can_operate(), "試合終了後は操作できない")
-	assert_true.call(log["segments"].slice(0, 5) == [0, 1, 2, 3, 4], "さいしょは〜ぽんの順に進む")
+	var segment_count := _match_config.call_segment_seconds.size()
+	assert_true.call(log["segments"].slice(0, segment_count) == range(segment_count), "最初は〜ぽんの順に進む")
 	var rounds_played: int = log["rounds"]
 	game.start(SEED)
 	assert_true.call(
@@ -116,29 +114,3 @@ func _test_move_is_applied_on_tick(assert_true: Callable) -> void:
 	game.tick()
 	assert_true.call(game.record.size() == 3, "同じ指が続いてもすべて記録する")
 	assert_true.call(hand.curls[HandTypes.Finger.RING] == 0, "同じ tick では最後の動きが残る")
-
-
-func _test_hands_called(assert_true: Callable) -> void:
-	var game := _new_match()
-	var calls := []
-	var called_names := []
-	game.hands_called.connect(
-		func(call: MatchSession.RoundResult) -> void:
-			calls.append(call)
-			called_names.append(game.judge.hand_name(game.hands[1].curls))
-			assert_true.call(
-				game.phase == MatchSession.Phase.CALLING and game.state.wins == [0, 0], "呼ぶだけで判定しない"
-			)
-	)
-	game.start(SEED)
-	var call_ticks := roundi(_match_config.call_total_seconds() * MatchSession.TICKS_PER_SECOND)
-	for i in call_ticks:
-		if i % MOVE_INTERVAL_TICKS == 0:
-			var curl := HandModel.CURL_MAX - game.hands[1].settled_curl(HandTypes.Finger.INDEX)
-			game.move(1, HandTypes.Finger.INDEX, curl)
-		game.tick()
-	assert_true.call(calls.size() == 1, "手の名前は1ラウンドに1回だけ呼ぶ (%d)" % calls.size())
-	if calls.is_empty():
-		return
-	var call: MatchSession.RoundResult = calls[0]
-	assert_true.call(call.their_name == called_names[0], "呼んだ瞬間の手の名前を出す")

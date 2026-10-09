@@ -75,9 +75,3 @@ func hand_name(curls: PackedInt32Array) -> String:
 	if is_original(shape_of(snapped)):
 		format = _names.foul_original_format
 	return format.format({"name": _names.name_of(snapped)})
-
-
-## states は反則でない手の指の状態。手のそばに出す勝ち条件の文(GameDesign 2.3節・5章)。
-func condition_text(states: Array) -> String:
-	var condition := rules.condition_of(states)
-	return rules.no_condition_text if condition == null else condition.text

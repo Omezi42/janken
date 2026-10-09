@@ -1,7 +1,7 @@
 class_name App
 extends Control
 ## 画面の流れ(GameDesign 9章、Architecture 6章)。画面を1つずつ子に置いて差し替える。
-## 開発用の起動引数(`-- --replay=<記録の文字列>` / `-- --bot-vs-bot`)があればタイトルを飛ばしてひとりで練習を始める。
+## 開発用の起動引数(`-- --replay=<記録の文字列>` / `-- --bot-vs-bot`)があればタイトルを飛ばして一人で練習を始める。
 ## `-- --server=<URL>` でつなぐサーバーを替える。
 
 const MATCH_CONFIG: MatchConfig = preload("res://data/match_config.tres")

@@ -1,14 +1,14 @@
 class_name PasscodeScreen
 extends Control
-## 合言葉の入力(GameDesign 4章)。枠に数字を埋め、そろうまで「けってい」は押せない。テンキーだけで入れる。
+## 合言葉の入力(GameDesign 4章)。枠に数字を埋め、そろうまで「決定」は押せない。テンキーだけで入れる。
 
 signal entered(passcode: String)
 signal back_requested
 
 const CAPTION_TEXT := "合言葉を入れてね"
-const DELETE_TEXT := "けす"
-const ENTER_TEXT := "けってい"
-const BACK_TEXT := "もどる"
+const DELETE_TEXT := "消す"
+const ENTER_TEXT := "決定"
+const BACK_TEXT := "戻る"
 ## テンキーの並び(上の段から)。
 const KEY_ROWS := [
 	["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], [DELETE_TEXT, "0", ENTER_TEXT]

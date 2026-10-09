@@ -7,7 +7,6 @@ extends MatchSession
 var record := MatchRecord.new()
 ## start() からの tick 数。記録の時刻に使う。
 var tick_count := 0
-var _match_config: MatchConfig
 var _effect_table: HandEffectTable
 var _rng := RandomNumberGenerator.new()
 var _phase_ticks := 0
@@ -18,13 +17,12 @@ var _pending_curls := PackedByteArray()
 
 
 func _init(
-	match_config: MatchConfig,
+	config: MatchConfig,
 	names: HandNameTable,
 	effect_table: HandEffectTable,
 	rule_table: HandRuleTable
 ) -> void:
-	super(names, rule_table, match_config)
-	_match_config = match_config
+	super(names, rule_table, config)
 	_effect_table = effect_table
 
 
@@ -37,7 +35,7 @@ func start(match_seed: int) -> void:
 	record = MatchRecord.new()
 	record.seed = match_seed
 	tick_count = 0
-	state = MatchState.new(_match_config)
+	state = MatchState.new(match_config)
 	effects.reset()
 	_start_round()
 
@@ -61,7 +59,7 @@ func tick() -> void:
 			_tick_call()
 		Phase.RESULT:
 			_phase_ticks += 1
-			if _phase_seconds() >= _match_config.result_display_seconds:
+			if _phase_seconds() >= match_config.result_display_seconds:
 				_end_result()
 	tick_count += 1
 
@@ -114,8 +112,8 @@ func _tick_call() -> void:
 	for hand in hands:
 		hand.step()
 	_phase_ticks += 1
-	var segment := _match_config.call_segment_at(_phase_seconds())
-	if segment >= _match_config.call_segment_seconds.size():
+	var segment := match_config.call_segment_at(_phase_seconds())
+	if segment >= match_config.call_segment_seconds.size():
 		_finish_round()
 	elif segment != _segment:
 		_enter_segment(segment)
@@ -124,8 +122,6 @@ func _tick_call() -> void:
 func _enter_segment(segment: int) -> void:
 	_segment = segment
 	call_segment_changed.emit(_segment)
-	if _segment == _match_config.hand_call_segment:
-		hands_called.emit(_name_hands())
 
 
 func _phase_seconds() -> float:
