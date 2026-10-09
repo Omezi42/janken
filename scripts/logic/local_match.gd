@@ -1,45 +1,12 @@
 class_name LocalMatch
-extends RefCounted
+extends MatchSession
 ## オフラインの1試合(GameDesign 5章)。プレイヤーは 0(手前)と 1(奥)。
 ## 固定間隔の tick() だけで進む決定論的なシミュレーション。同じ seed と同じ入力からは必ず同じ試合になる。
 ## 入力は move() で溜め、次の tick() の頭で順に指を動かし record へ残す(Architecture 4.1節)。
 
-signal round_started
-signal call_segment_changed(index: int)
-## 手の名前を呼ぶ区間の始まり。call.outcome は使わない。
-signal hands_called(call: RoundResult)
-signal round_judged(result: RoundResult)
-signal match_finished(winner: int)
-
-enum Phase { CALLING, RESULT, OVER }
-
-const TICKS_PER_SECOND := 60
-const TICK_SECONDS := 1.0 / TICKS_PER_SECOND
-const PLAYER_COUNT := 2
-
-
-class RoundResult:
-	var outcome: HandTypes.Outcome
-	## 指の状態(HandTypes.FingerState)。
-	var my_states: Array
-	var their_states: Array
-	var my_shape: HandTypes.Shape
-	var their_shape: HandTypes.Shape
-	var my_name: String
-	var their_name: String
-	## 発動した効果。無ければ null。判定のときだけ入る。
-	var my_effect: HandEffect
-	var their_effect: HandEffect
-
-
-var hands: Array[HandModel] = []
-var state: MatchState
-var phase := Phase.OVER
 var record := MatchRecord.new()
-var effects := ActiveEffects.new()
 ## start() からの tick 数。記録の時刻に使う。
 var tick_count := 0
-var judge: HandShapeJudge
 var _match_config: MatchConfig
 var _effect_table: HandEffectTable
 var _rng := RandomNumberGenerator.new()
@@ -56,12 +23,9 @@ func _init(
 	effect_table: HandEffectTable,
 	rule_table: HandRuleTable
 ) -> void:
+	super(names, rule_table, match_config)
 	_match_config = match_config
 	_effect_table = effect_table
-	judge = HandShapeJudge.new(names, rule_table)
-	for player in PLAYER_COUNT:
-		hands.append(HandModel.new())
-	state = MatchState.new(match_config)
 
 
 static func slot_of(player: int, finger: int) -> int:
@@ -78,11 +42,6 @@ func start(match_seed: int) -> void:
 	_start_round()
 
 
-func can_operate() -> bool:
-	return phase == Phase.CALLING
-
-
-## 指を曲がり具合 curl(0〜HandModel.CURL_MAX)へ動かす。操作できない間は捨てる。
 func move(player: int, finger: HandTypes.Finger, curl: int) -> void:
 	if can_operate():
 		push_move(slot_of(player, finger), curl)
@@ -174,14 +133,7 @@ func _phase_seconds() -> float:
 
 
 func _name_hands() -> RoundResult:
-	var result := RoundResult.new()
-	result.my_states = judge.states_of(hands[0].curls)
-	result.their_states = judge.states_of(hands[1].curls)
-	result.my_shape = HandShapeJudge.shape_of(result.my_states)
-	result.their_shape = HandShapeJudge.shape_of(result.their_states)
-	result.my_name = judge.hand_name(hands[0].curls)
-	result.their_name = judge.hand_name(hands[1].curls)
-	return result
+	return name_hands(hands[0].curls, hands[1].curls)
 
 
 func _finish_round() -> void:

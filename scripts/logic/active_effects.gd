@@ -16,14 +16,14 @@ func _init() -> void:
 
 
 static func opponent_of(player: int) -> int:
-	return LocalMatch.PLAYER_COUNT - 1 - player
+	return MatchSession.PLAYER_COUNT - 1 - player
 
 
 func reset() -> void:
 	_censor_rounds.assign([0, 0])
 	_pistol_rounds.assign([0, 0])
 	_oversleep_rounds.clear()
-	for player in LocalMatch.PLAYER_COUNT:
+	for player in MatchSession.PLAYER_COUNT:
 		var fingers := PackedInt32Array()
 		fingers.resize(HandTypes.Finger.size())
 		_oversleep_rounds.append(fingers)
@@ -45,7 +45,7 @@ func trigger(owner: int, effect: HandEffect, states: Array) -> void:
 
 
 func end_round() -> void:
-	for player in LocalMatch.PLAYER_COUNT:
+	for player in MatchSession.PLAYER_COUNT:
 		_censor_rounds[player] = maxi(_censor_rounds[player] - 1, 0)
 		_pistol_rounds[player] = maxi(_pistol_rounds[player] - 1, 0)
 		var rounds := _oversleep_rounds[player]

@@ -7,7 +7,7 @@ extends SceneTree
 const DEFAULT_MATCHES := 1
 const DEFAULT_SEED := 1
 ## 1試合の tick の上限(あいこが続いても止まるように)。
-const MAX_TICKS := LocalMatch.TICKS_PER_SECOND * 600
+const MAX_TICKS := MatchSession.TICKS_PER_SECOND * 600
 const OUTCOME_LABELS := {
 	HandTypes.Outcome.WIN: "P0勝ち",
 	HandTypes.Outcome.LOSE: "P1勝ち",
@@ -43,11 +43,11 @@ func _run() -> void:
 func _play_bots(match_seed: int) -> void:
 	var game := _new_match()
 	var bots: Array[HandBot] = []
-	for player in LocalMatch.PLAYER_COUNT:
-		bots.append(HandBot.new(game, player, match_seed * LocalMatch.PLAYER_COUNT + player))
+	for player in MatchSession.PLAYER_COUNT:
+		bots.append(HandBot.new(game, player, match_seed * MatchSession.PLAYER_COUNT + player))
 	print("== seed %d" % match_seed)
 	game.start(match_seed)
-	while game.phase != LocalMatch.Phase.OVER and game.tick_count < MAX_TICKS:
+	while game.phase != MatchSession.Phase.OVER and game.tick_count < MAX_TICKS:
 		for bot in bots:
 			bot.think()
 		game.tick()
@@ -70,7 +70,7 @@ func _new_match() -> LocalMatch:
 	return game
 
 
-func _print_round(result: LocalMatch.RoundResult) -> void:
+func _print_round(result: MatchSession.RoundResult) -> void:
 	print("  %s / %s → %s" % [result.my_name, result.their_name, OUTCOME_LABELS[result.outcome]])
 
 

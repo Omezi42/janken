@@ -2,7 +2,7 @@ extends RefCounted
 ## 決定論とリプレイ(Architecture 4.1節)。同じ seed と記録から、ボット無しで同じ試合が再現されること。
 
 const SEED := 7
-const MAX_MATCH_TICKS := LocalMatch.TICKS_PER_SECOND * 600
+const MAX_MATCH_TICKS := MatchSession.TICKS_PER_SECOND * 600
 
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
@@ -41,7 +41,7 @@ func _new_match(log: Dictionary) -> LocalMatch:
 	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
 	log["names"] = []
 	game.round_judged.connect(
-		func(result: LocalMatch.RoundResult) -> void:
+		func(result: MatchSession.RoundResult) -> void:
 			log["names"].append([result.my_name, result.their_name])
 	)
 	return game
@@ -51,10 +51,10 @@ func _play_bots(match_seed: int) -> Dictionary:
 	var log := {}
 	var game := _new_match(log)
 	var bots: Array[HandBot] = []
-	for player in LocalMatch.PLAYER_COUNT:
+	for player in MatchSession.PLAYER_COUNT:
 		bots.append(HandBot.new(game, player, match_seed + player))
 	game.start(match_seed)
-	while game.phase != LocalMatch.Phase.OVER and game.tick_count < MAX_MATCH_TICKS:
+	while game.phase != MatchSession.Phase.OVER and game.tick_count < MAX_MATCH_TICKS:
 		for bot in bots:
 			bot.think()
 		game.tick()

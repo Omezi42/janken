@@ -116,10 +116,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var max_seconds := LocalMatch.TICK_SECONDS * MAX_TICKS_PER_FRAME
+	var max_seconds := MatchSession.TICK_SECONDS * MAX_TICKS_PER_FRAME
 	_unprocessed_seconds = minf(_unprocessed_seconds + delta, max_seconds)
-	while _unprocessed_seconds >= LocalMatch.TICK_SECONDS:
-		_unprocessed_seconds -= LocalMatch.TICK_SECONDS
+	while _unprocessed_seconds >= MatchSession.TICK_SECONDS:
+		_unprocessed_seconds -= MatchSession.TICK_SECONDS
 		_tick()
 	_my_view.interactive = _is_human_playing() and _match.can_operate()
 	_update_tags()
@@ -141,7 +141,7 @@ func _setup_players(args: PackedStringArray) -> void:
 
 
 func _is_human_playing() -> bool:
-	return _replay == null and _bots.size() < LocalMatch.PLAYER_COUNT
+	return _replay == null and _bots.size() < MatchSession.PLAYER_COUNT
 
 
 func _tick() -> void:
@@ -174,7 +174,7 @@ func _build() -> void:
 	_their_view.mouse_filter = MOUSE_FILTER_IGNORE
 	_my_view = _add_hand_view(_match.hands[MY_PLAYER], MY_HAND_RECT, MY_SLEEVE_COLOR)
 	_my_view.finger_moved.connect(_on_my_finger_moved)
-	_tags.resize(LocalMatch.PLAYER_COUNT)
+	_tags.resize(MatchSession.PLAYER_COUNT)
 	_tags[THEIR_PLAYER] = _add_tag(THEIR_TAG_RECT)
 	_tags[MY_PLAYER] = _add_tag(MY_TAG_RECT)
 	_their_effect_label = _add_label(THEIR_EFFECT_RECT, EFFECT_FONT_SIZE)
@@ -294,14 +294,14 @@ func _on_call_segment_changed(index: int) -> void:
 	_their_view.beat()
 
 
-func _on_hands_called(call: LocalMatch.RoundResult) -> void:
+func _on_hands_called(call: MatchSession.RoundResult) -> void:
 	_stamp_name(_my_name_label, call.my_name, call.my_shape)
 	_their_tape.visible = _match.effects.is_censored(THEIR_PLAYER)
 	if not _their_tape.visible:
 		_stamp_name(_their_name_label, call.their_name, call.their_shape)
 
 
-func _on_round_judged(result: LocalMatch.RoundResult) -> void:
+func _on_round_judged(result: MatchSession.RoundResult) -> void:
 	_flash.flash()
 	_backdrop.burst()
 	_shake_left = SHAKE_SECONDS
@@ -343,7 +343,7 @@ func _update_tags() -> void:
 	var states := []
 	for hand in _match.hands:
 		states.append(_match.judge.states_of(hand.curls))
-	for player in LocalMatch.PLAYER_COUNT:
+	for player in MatchSession.PLAYER_COUNT:
 		var tag := _tags[player]
 		if not _match.can_operate() or _is_hidden(player):
 			tag.clear()

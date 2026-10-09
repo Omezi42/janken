@@ -25,4 +25,4 @@ func tick() -> void:
 
 
 func is_finished() -> bool:
-	return _match.phase == LocalMatch.Phase.OVER
+	return _match.phase == MatchSession.Phase.OVER

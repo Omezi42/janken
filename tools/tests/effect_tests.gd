@@ -59,13 +59,15 @@ func _test_oversleep_target(assert_true: Callable) -> void:
 func _test_match_applies_effects(assert_true: Callable) -> void:
 	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
 	var results := []
-	game.round_judged.connect(func(result: LocalMatch.RoundResult) -> void: results.append(result))
+	game.round_judged.connect(
+		func(result: MatchSession.RoundResult) -> void: results.append(result)
+	)
 	game.start(SEED)
 	_play_round(game, [_states_of(PISTOL), _states_of(INDEX_OVERSLEEP)])
 	if results.is_empty():
 		assert_true.call(false, "1ラウンド目が判定されない")
 		return
-	var first: LocalMatch.RoundResult = results[0]
+	var first: MatchSession.RoundResult = results[0]
 	assert_true.call(
 		first.my_shape == HandTypes.Shape.NAMED and first.outcome == HandTypes.Outcome.DRAW,
 		"勝ち条件の無い手どうしはあいこ"
@@ -77,17 +79,17 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 		),
 		"両者の効果が同時に発動する"
 	)
-	while game.phase != LocalMatch.Phase.CALLING:
+	while game.phase != MatchSession.Phase.CALLING:
 		game.tick()
 	assert_true.call(HandModel.CURL_MAX in game.hands[1].curls, "撃たれた指は曲がりきりから始まる")
 	var delays := game.hands[0].delay_ticks
-	var delay := roundi(_effects.oversleep_delay_seconds * LocalMatch.TICKS_PER_SECOND)
+	var delay := roundi(_effects.oversleep_delay_seconds * MatchSession.TICKS_PER_SECOND)
 	assert_true.call(
 		delays[HandTypes.Finger.INDEX] == delay and delays[HandTypes.Finger.MIDDLE] == 0,
 		"寝坊した指だけ動きが遅れる %s" % [delays]
 	)
 	_play_round(game, [_states_of("●●●●●"), _states_of("●●●●●")])
-	while game.phase != LocalMatch.Phase.CALLING:
+	while game.phase != MatchSession.Phase.CALLING:
 		game.tick()
 	assert_true.call(game.hands[0].delay_ticks[HandTypes.Finger.INDEX] == 0, "効果は1ラウンドで切れる")
 
@@ -95,23 +97,25 @@ func _test_match_applies_effects(assert_true: Callable) -> void:
 func _test_foul_has_no_effect(assert_true: Callable) -> void:
 	var game := LocalMatch.new(_match_config, _names, _effects, _rules)
 	var results := []
-	game.round_judged.connect(func(result: LocalMatch.RoundResult) -> void: results.append(result))
+	game.round_judged.connect(
+		func(result: MatchSession.RoundResult) -> void: results.append(result)
+	)
 	game.start(SEED)
 	_play_round(game, [_states_of(PISTOL), _states_of(PISTOL)])
 	if results.is_empty():
 		assert_true.call(false, "反則の確認で1ラウンド目が判定されない")
 		return
 	assert_true.call(results[0].my_effect != null, "反則でないピストルは効果が発動する")
-	while game.phase != LocalMatch.Phase.CALLING:
+	while game.phase != MatchSession.Phase.CALLING:
 		game.tick()
-	while game.phase == LocalMatch.Phase.CALLING:
+	while game.phase == MatchSession.Phase.CALLING:
 		var pose := HandModel.pose_of(_states_of(PISTOL))
 		pose[HandTypes.Finger.PINKY] = HALF_CURL
 		for finger in HandTypes.Finger.size():
 			if game.hands[0].settled_curl(finger as HandTypes.Finger) != pose[finger]:
 				game.move(0, finger as HandTypes.Finger, pose[finger])
 		game.tick()
-	var foul: LocalMatch.RoundResult = results[1]
+	var foul: MatchSession.RoundResult = results[1]
 	assert_true.call(
 		foul.my_shape == HandTypes.Shape.FOUL and foul.my_effect == null, "反則では効果が発動しない"
 	)
@@ -120,8 +124,8 @@ func _test_foul_has_no_effect(assert_true: Callable) -> void:
 
 ## 掛け声の終わりまで、両者の手を goals へ動かし続ける。
 func _play_round(game: LocalMatch, goals: Array) -> void:
-	while game.phase == LocalMatch.Phase.CALLING:
-		for player in LocalMatch.PLAYER_COUNT:
+	while game.phase == MatchSession.Phase.CALLING:
+		for player in MatchSession.PLAYER_COUNT:
 			var hand := game.hands[player]
 			var pose := HandModel.pose_of(goals[player])
 			for finger in HandTypes.Finger.size():
