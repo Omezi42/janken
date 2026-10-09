@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 変更後の検証を1コマンドにまとめる: gdformat → gdlint → ヘッドレステスト → 起動スモーク。
+# 変更後の検証を1コマンドにまとめる: gdformat → gdlint → ヘッドレステスト → 起動スモーク → サーバー → オンライン。
 # 引数なし: git で変更のある .gd だけを整形・lint する。 --all: scripts/ と tools/ の全 .gd。
 # 出力は要点だけに絞る(ログ全文は logs/check_*.log)。
 set -u
@@ -52,6 +52,37 @@ else
   else
     echo "ok"
   fi
+fi
+
+echo "== server (export_rules → tsc → node --test)"
+if [ ! -d server/node_modules ]; then
+  echo "NG: server/node_modules が無い(cd server && npm install)"
+  status=1
+else
+  timeout "$GODOT_TIMEOUT" "$GODOT" --headless --path . --script res://tools/export_rules.gd > logs/check_export.log 2>&1     || { status=1; grep -vE "^Godot Engine|^$" logs/check_export.log | head -5; }
+  if (cd server && npx tsc --noEmit && node --test test/*.test.ts) > logs/check_server.log 2>&1; then
+    echo "ok"
+  else
+    status=1
+    grep -E "✖|error|FAIL" logs/check_server.log | head -10
+  fi
+fi
+
+# 通信に関わる変更があるときだけ、wrangler dev を立てて2クライアントで試合を通す(1分ほど掛かる)。
+echo "== online (wrangler dev + 2 clients)"
+ONLINE_PORT="${ONLINE_PORT:-8788}"
+CHANGED=$( (git diff --name-only HEAD; git ls-files --others --exclude-standard) | sort -u)
+if [ "${1:-}" != "--all" ] && ! echo "$CHANGED" | grep -qE '^(server/|scripts/net/|scripts/logic/|data/|tools/online_match_test\.gd)'; then
+  echo "skip(通信に関わる変更なし)"
+elif [ -d server/node_modules ]; then
+  (cd server && WRANGLER_SEND_METRICS=false exec npx wrangler dev --port "$ONLINE_PORT" --ip 127.0.0.1) > logs/check_wrangler.log 2>&1 &
+  WRANGLER_PID=$!
+  for _ in $(seq 1 60); do curl -s "http://127.0.0.1:$ONLINE_PORT/" > /dev/null && break; sleep 0.5; done
+  timeout "$GODOT_TIMEOUT" "$GODOT" --headless --path . --script res://tools/online_match_test.gd -- --server="ws://127.0.0.1:$ONLINE_PORT" > logs/check_online.log 2>&1
+  grep -E "online tests|FAILED|SCRIPT ERROR|Parse Error" logs/check_online.log | head -20
+  grep -q "online tests passed" logs/check_online.log || status=1
+  WINPID=$(cat "/proc/$WRANGLER_PID/winpid" 2>/dev/null)
+  if [ -n "$WINPID" ]; then taskkill //F //T //PID "$WINPID" > /dev/null 2>&1; else kill "$WRANGLER_PID" 2> /dev/null; fi
 fi
 
 [ $status -eq 0 ] && echo "== ALL OK" || echo "== NG (logs/check_*.log)"

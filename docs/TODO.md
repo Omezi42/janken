@@ -44,11 +44,11 @@
 - [x] ボットを引っぱる操作に合わせる(1本ずつ時間を掛ける・引き足りない失敗・相手を見た組み替え)
 
 ### オンライン(GameDesign 4章・7章・9章、Architecture 3章)
-- [ ] `server/` の雛形(Workers + Durable Objects、wrangler でローカル起動)
-- [ ] `tools/export_rules.gd`(ルールの JSON と判定一致テストの答え)と `server/src/rules.ts` + `node --test`
-- [ ] `RoomMatch`(部屋の試合の進行・指を動かせる量の上限・切断)+ `node --test`、待ち行列と部屋の Durable Object
-- [ ] `MatchSession` を切り出し、`OnlineConfig`・`NetClient`・`Matchmaker`・`OnlineMatch`
-- [ ] 通信の検証(`tools/online_match_test.gd` をローカルのサーバーで回す。`check.sh` へ組み込む)
+- [x] `server/` の雛形(Workers + Durable Objects、wrangler でローカル起動)
+- [x] `tools/export_rules.gd`(ルールの JSON と判定一致テストの答え)と `server/src/rules.ts` + `node --test`
+- [x] `RoomMatch`(部屋の試合の進行・指を動かせる量の上限・切断)+ `node --test`、待ち行列と部屋の Durable Object
+- [x] `MatchSession` を切り出し、`OnlineConfig`・`NetClient`・`Matchmaker`・`OnlineMatch`
+- [x] 通信の検証(`tools/online_match_test.gd` をローカルのサーバーで回す。`check.sh` へ組み込む)
 - [ ] 画面の流れ: `App`・`TitleScreen`(名前)・`PasscodeScreen`(テンキー)・`WaitingScreen`、`BattleScreen` の名前と終了のボタン
 - [ ] Web 書き出しと Cloudflare へのデプロイ(サーバーの URL を Web 版へ渡す)
 - [ ] Web 版のスマホで名前の入力(画面のキーボード・日本語入力)が動くか確かめる。動かなければ名前の決め方を提案し直す

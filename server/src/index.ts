@@ -12,6 +12,8 @@ const LOBBY_NAME = "lobby";
 const ROOM_NAME = /^(p\d{1,8}|r[0-9a-f-]{36})$/;
 const ROOM_PREFIX = "/room/";
 const NORMAL_CLOSE = 1000;
+// 最後のメッセージの直後に切ると Godot の WebSocketPeer がそのメッセージを落とすため、受け取った側が切るのを待ってから切る。
+const CLOSE_GRACE_MS = 3000;
 
 function isWebSocket(request: Request): boolean {
   return request.headers.get("Upgrade")?.toLowerCase() === "websocket";
@@ -33,6 +35,10 @@ function sendJson(socket: WebSocket, message: Message): void {
   } catch {
     // 切れた接続へは送らない。close イベントで片付く。
   }
+}
+
+function closeSoon(socket: WebSocket): void {
+  setTimeout(() => socket.close(NORMAL_CLOSE), CLOSE_GRACE_MS);
 }
 
 function parse(data: unknown): Message | null {
@@ -74,7 +80,7 @@ export class Lobby extends DurableObject<Env> {
       const room = "r" + crypto.randomUUID();
       for (const socket of pair) {
         sendJson(socket, { t: "matched", room });
-        socket.close(NORMAL_CLOSE);
+        closeSoon(socket);
       }
     }
     return upgraded(client);
@@ -96,7 +102,7 @@ export class Room extends DurableObject<Env> {
     const player = this.match.join();
     if (player === null) {
       sendJson(server, { t: "full" });
-      server.close(NORMAL_CLOSE);
+      closeSoon(server);
       return upgraded(client);
     }
     this.sockets[player] = server;
@@ -146,6 +152,6 @@ export class Room extends DurableObject<Env> {
     const sockets = this.sockets;
     this.sockets = [null, null];
     this.match = this.newMatch();
-    for (const socket of sockets) socket?.close(NORMAL_CLOSE);
+    for (const socket of sockets) if (socket !== null) closeSoon(socket);
   }
 }
