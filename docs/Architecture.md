@@ -11,6 +11,7 @@
 | `scripts/net/` | 通信(3章)。ロジック層を使い、表示層には依存しない |
 | `scripts/ui/` | 表示・入力・画面の流れ(6章) |
 | `data/` | Resource の初期値(`.tres`) |
+| `assets/fonts/` | 日本語フォント(Zen Kaku Gothic New Bold、OFL。ライセンス文書を同じ所に置く) |
 | `scenes/` | `.tscn`。直接編集せず `tools/godot_apply_patch.gd` 経由で更新する |
 | `server/` | Cloudflare Workers + Durable Objects のサーバー(TypeScript。3章) |
 | `docs/` | 仕様・設計・落とし穴・TODO |
@@ -151,7 +152,7 @@ seed と入力の列から試合を完全に再現できるようにする(不�
 
 ## 6章 表示・入力層
 
-絵はすべてコードで描く(画像を使わない)。見た目の数値(大きさ・色・揺れ)は表示層の const に置き、ロジックへ渡さない。
+絵はすべてコードで描く(画像を使わない)。文字は `gui/theme/custom_font` に置いた日本語フォント1つで描く(Web版はOSのフォントを使えないため。JIS第1・第2水準の漢字を持ち、名前の入力にも足りる)。見た目の数値(大きさ・色・揺れ)は表示層の const に置き、ロジックへ渡さない。
 
 - `HandView`: `HandModel` を描画し、つかんで引いた指の曲がり具合が変わるたびに `finger_moved(指, 曲がり具合)` で知らせる(`HandModel` は直接動かさない。4.1節)。
   - つかむ: 押した位置から、いまの見た目の指(付け根から指先までの線分)への距離が一番近い指を、離すまでつかむ。

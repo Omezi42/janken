@@ -23,6 +23,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="keep_width"
 window/handheld/orientation=1
 
+[gui]
+
+theme/custom_font="res://assets/fonts/ZenKakuGothicNew-Bold.ttf"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

@@ -50,8 +50,8 @@
 - [x] `MatchSession` を切り出し、`OnlineConfig`・`NetClient`・`Matchmaker`・`OnlineMatch`
 - [x] 通信の検証(`tools/online_match_test.gd` をローカルのサーバーで回す。`check.sh` へ組み込む)
 - [x] 画面の流れ: `App`・`TitleScreen`(名前)・`PasscodeScreen`(テンキー)・`WaitingScreen`、`BattleScreen` の名前と終了のボタン
-- [ ] Web 書き出しと Cloudflare へのデプロイ(サーバーの URL を Web 版へ渡す)
+- [ ] Web 書き出しと Cloudflare へのデプロイ(サーバーの URL を Web 版へ渡す。フォントのライセンス文書も配信物に含める)
 - [ ] Web 版のスマホで名前の入力(画面のキーボード・日本語入力)が動くか確かめる。動かなければ名前の決め方を提案し直す
 
 ### アセット
-- [ ] 日本語フォントを取り込む(Web版はOSのフォントへフォールバックできず、文字が出ない)
+- [x] 日本語フォントを取り込む(Web版はOSのフォントへフォールバックできず、文字が出ない)
