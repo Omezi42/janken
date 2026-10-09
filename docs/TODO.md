@@ -2,10 +2,6 @@
 
 ## 仕様の未決事項(決まったら GameDesign.md へ移す)
 
-- 合言葉の形式(桁数・使える文字)、ランダムマッチで相手が見つからないときの扱い
-- 切断時の扱い
-- 画面構成(タイトル → マッチング → 対戦 → 結果)。対戦画面の演出は GameDesign 8章
-- 戦績・レートなど試合の外の要素の有無
 - リプレイをプレイヤーに見せるか(記録をコピーするボタン・貼り付けて再生する画面)。いまは開発用の起動引数と標準出力だけ
 
 ## 実装
@@ -47,12 +43,15 @@
 - [ ] 効果音(コードで合成する)
 - [x] ボットを引っぱる操作に合わせる(1本ずつ時間を掛ける・引き足りない失敗・相手を見た組み替え)
 
-### オンライン
+### オンライン(GameDesign 4章・7章・9章、Architecture 3章)
 - [ ] `server/` の雛形(Workers + Durable Objects、wrangler でローカル起動)
-- [ ] 反転の同期・反転回数の上限チェック
-- [ ] サーバー時刻での判定と結果通知、クライアントとの判定一致テスト
-- [ ] 通信の検証(ローカルのサーバーに2クライアントをつないで1試合を通すヘッドレステスト)
-- [ ] Web 書き出しと Cloudflare Pages への配信
+- [ ] `tools/export_rules.gd`(ルールの JSON と判定一致テストの答え)と `server/src/rules.ts` + `node --test`
+- [ ] `RoomMatch`(部屋の試合の進行・指を動かせる量の上限・切断)+ `node --test`、待ち行列と部屋の Durable Object
+- [ ] `MatchSession` を切り出し、`OnlineConfig`・`NetClient`・`Matchmaker`・`OnlineMatch`
+- [ ] 通信の検証(`tools/online_match_test.gd` をローカルのサーバーで回す。`check.sh` へ組み込む)
+- [ ] 画面の流れ: `App`・`TitleScreen`(名前)・`PasscodeScreen`(テンキー)・`WaitingScreen`、`BattleScreen` の名前と終了のボタン
+- [ ] Web 書き出しと Cloudflare へのデプロイ(サーバーの URL を Web 版へ渡す)
+- [ ] Web 版のスマホで名前の入力(画面のキーボード・日本語入力)が動くか確かめる。動かなければ名前の決め方を提案し直す
 
 ### アセット
 - [ ] 日本語フォントを取り込む(Web版はOSのフォントへフォールバックできず、文字が出ない)
