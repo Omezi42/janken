@@ -28,7 +28,7 @@
 - [x] 名前付きの手の強さを グーチョキパー > 名前付き にする(`HandNameTable`)
 - [x] `HandEffectTable` と `ActiveEffects`、`LocalMatch` での発動と反映(自主規制・寝坊・ピストル)+ テスト
 - [x] 画面: モザイク・規制テープ・効果の文
-- [ ] 名前付きの手の勝ち条件と効果を表から外す(本家だけで遊ぶリリース版。コードは残し、テストは `tools/tests/fixtures/` の表へ)
+- [x] 名前付きの手の勝ち条件と効果を表から外す(本家だけで遊ぶリリース版。コードは残し、テストは `tools/tests/fixtures/` の表へ)
 
 ### 曲がり具合と勝ち条件(GameDesign 2章・6章)
 - [x] `HandModel` を曲がり具合(0〜100)にし、`LocalMatch.move()`・記録の形式を合わせる + テスト
