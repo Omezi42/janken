@@ -77,9 +77,7 @@ func hand_name(curls: PackedInt32Array) -> String:
 	return format.format({"name": _names.name_of(snapped)})
 
 
-## 手のそばに出す勝ち条件の文(GameDesign 5章)。
+## states は反則でない手の指の状態。手のそばに出す勝ち条件の文(GameDesign 2.3節・5章)。
 func condition_text(states: Array) -> String:
-	if shape_of(states) == HandTypes.Shape.FOUL:
-		return rules.foul_text
 	var condition := rules.condition_of(states)
 	return rules.no_condition_text if condition == null else condition.text
