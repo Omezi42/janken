@@ -3,62 +3,7 @@
 [ext_resource type="Script" path="res://scripts/data/hand_effect.gd" id="1_ue1ly"]
 [ext_resource type="Script" path="res://scripts/data/hand_effect_table.gd" id="2_1thc6"]
 
-[sub_resource type="Resource" id="Resource_7pmod"]
-script = ExtResource("1_ue1ly")
-rounds = 1
-text = "次のラウンド、{target}から手が見えない"
-
-[sub_resource type="Resource" id="Resource_egnry"]
-script = ExtResource("1_ue1ly")
-rounds = 2
-text = "次の2ラウンド、{target}から手が見えない"
-
-[sub_resource type="Resource" id="Resource_prw3e"]
-script = ExtResource("1_ue1ly")
-kind = 1
-rounds = 1
-text = "次のラウンド、{target}の親指が寝坊"
-
-[sub_resource type="Resource" id="Resource_qekj5"]
-script = ExtResource("1_ue1ly")
-kind = 1
-rounds = 1
-text = "次のラウンド、{target}の人差し指が寝坊"
-
-[sub_resource type="Resource" id="Resource_sd1w0"]
-script = ExtResource("1_ue1ly")
-kind = 1
-rounds = 1
-text = "次のラウンド、{target}の中指が寝坊"
-
-[sub_resource type="Resource" id="Resource_yyre6"]
-script = ExtResource("1_ue1ly")
-kind = 1
-rounds = 1
-text = "次のラウンド、{target}の薬指が寝坊"
-
-[sub_resource type="Resource" id="Resource_r0l8o"]
-script = ExtResource("1_ue1ly")
-kind = 1
-rounds = 1
-text = "次のラウンド、{target}の小指が寝坊"
-
-[sub_resource type="Resource" id="Resource_y2lxe"]
-script = ExtResource("1_ue1ly")
-kind = 2
-rounds = 1
-text = "次のラウンド、{target}の指を1本撃つ"
-
 [resource]
 script = ExtResource("2_1thc6")
-effects = Dictionary[String, ExtResource("1_ue1ly")]({
-"○○○○●": SubResource("Resource_r0l8o"),
-"○○○●○": SubResource("Resource_yyre6"),
-"○○●○○": SubResource("Resource_sd1w0"),
-"○○●●●": SubResource("Resource_y2lxe"),
-"○●○○○": SubResource("Resource_qekj5"),
-"○●○●●": SubResource("Resource_egnry"),
-"●○○○○": SubResource("Resource_prw3e"),
-"●●○●●": SubResource("Resource_7pmod")
-})
+effects = Dictionary[String, ExtResource("1_ue1ly")]({})
 oversleep_delay_seconds = 0.4

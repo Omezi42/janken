@@ -1,5 +1,6 @@
 extends RefCounted
-## 名前付きの手の効果: HandEffectTable・ActiveEffects・LocalMatch での発動と反映(GameDesign 2.5節)。
+## 効果の仕組み: HandEffectTable・ActiveEffects・LocalMatch での発動と反映。
+## 本番の表は空なので、名前付きの手の行を持つ fixtures の表で確かめる(Architecture 5章)。
 
 const SEED := 7
 const PISTOL := "○○●●●"
@@ -10,11 +11,13 @@ const HALF_CURL := 50
 
 var _match_config: MatchConfig = load("res://data/match_config.tres")
 var _names: HandNameTable = load("res://data/hand_name_table.tres")
-var _effects: HandEffectTable = load("res://data/hand_effect_table.tres")
-var _rules: HandRuleTable = load("res://data/hand_rule_table.tres")
+var _effects: HandEffectTable = load("res://tools/tests/fixtures/hand_effect_table_full.tres")
+var _rules: HandRuleTable = load("res://tools/tests/fixtures/hand_rule_table_full.tres")
+var _release_effects: HandEffectTable = load("res://data/hand_effect_table.tres")
 
 
 func run(assert_true: Callable) -> void:
+	assert_true.call(_release_effects.effects.is_empty(), "本番の表ではどの手も効果を持たない")
 	_test_table(assert_true)
 	_test_censor_rounds(assert_true)
 	_test_oversleep_target(assert_true)
