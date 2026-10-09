@@ -1,0 +1,38 @@
+{
+	"callSegmentSeconds": [
+		1.0,
+		1.0,
+		1.0,
+		1.0,
+		1.0
+	],
+	"conditions": {
+		"○○○○○": {
+			"kind": "SERIES",
+			"value": 0
+		},
+		"●○○●●": {
+			"kind": "SERIES",
+			"value": 2
+		},
+		"●●●●●": {
+			"kind": "SERIES",
+			"value": 1
+		}
+	},
+	"curlMax": 100,
+	"curledAbove": 0.8,
+	"curledMark": "●",
+	"extendedBelow": 0.2,
+	"extendedMark": "○",
+	"fallbackName": "ななしのグー",
+	"handCallSegment": 1,
+	"matchStartDelaySeconds": 1.5,
+	"moveBurst": 200,
+	"moveRatePerSecond": 1000,
+	"nameMaxLength": 8,
+	"paperMinExtended": 4,
+	"resultDisplaySeconds": 2.0,
+	"scissorsMinExtended": 2,
+	"winsToFinish": 3
+}

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="OnlineConfig" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/online_config.gd" id="1_online"]
+
+[resource]
+script = ExtResource("1_online")
+server_url = "ws://127.0.0.1:8787"
+name_max_length = 8
+default_name_prefix = "ななしの"
+default_name_suffixes = Array[String](["グー", "チョキ", "パー", "ピストル", "グッド", "メロイック"])
+bot_name = "れんしゅうボット"
+passcode_length = 4
+clock_sync_samples = 5
+match_start_delay_seconds = 1.5
+move_rate_per_second = 1000
+move_burst = 200
